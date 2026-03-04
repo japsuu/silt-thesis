@@ -59,22 +59,29 @@ public sealed class StatsWindow : IUiWindow
     {
         Debug.Assert(PerfMonitor.BenchmarkRun != null);
         ImGui.TextUnformatted("Benchmark mode");
-        if (PerfMonitor.BenchmarkRun.IsWarmingUp)
+
+        BenchmarkRun run = PerfMonitor.BenchmarkRun;
+
+        double warmupTargetS = Math.Max(0, run.Config.WarmUpSeconds);
+        double sampleTargetS = Math.Max(0, run.Config.SampleSeconds);
+        double warmupS = run.WarmUpTimeMs / 1000.0;
+        double sampleS = run.SampleTimeMs / 1000.0;
+
+        if (run.IsWarmingUp)
         {
-            ImGui.TextUnformatted($"Warming up... ({PerfMonitor.BenchmarkRun.WarmUpFrameCount}/{PerfMonitor.BenchmarkRun.Config.WarmUpFrameCount} frames)");
+            ImGui.TextUnformatted($"Warming up... ({warmupS:F2}/{warmupTargetS:F2} s, frames={run.WarmUpFrameCount:N0})");
         }
         else
         {
-            ImGui.TextUnformatted($"Collecting benchmark data... ({PerfMonitor.BenchmarkRun.SampleFrameCount}/{PerfMonitor.BenchmarkRun.Config.SampleFrameCount} frames)");
+            ImGui.TextUnformatted($"Collecting benchmark data... ({sampleS:F2}/{sampleTargetS:F2} s, frames={run.SampleFrameCount:N0})");
 
-            BenchmarkRun run = PerfMonitor.BenchmarkRun;
             double bFpsAvg = run.FrameMsAvg > 0 ? 1000.0 / run.FrameMsAvg : 0;
             double bFpsMin = run.FrameMsMax > 0 ? 1000.0 / run.FrameMsMax : 0;
             double bFpsMax = run.FrameMsMin > 0 ? 1000.0 / run.FrameMsMin : 0;
 
-            ImGui.TextUnformatted($"Frame: {run.FrameMsAvg:F2} ms avg ({bFpsAvg:F1} FPS)");
-            ImGui.TextUnformatted($"Frame: {run.FrameMsMin:F2} ms min ({bFpsMax:F1} FPS) / {run.FrameMsMax:F2} ms max ({bFpsMin:F1} FPS)");
-            ImGui.TextUnformatted($"Total time: {run.TotalTimeMs / 1000.0:F2} s");
+            ImGui.TextUnformatted($"Frame avg    : {run.FrameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
+            ImGui.TextUnformatted($"Frame min/max: {run.FrameMsMin:F2} ms ({bFpsMax:F1} FPS) / {run.FrameMsMax:F2} ms ({bFpsMin:F1} FPS)");
+            ImGui.TextUnformatted($"Total sample time: {run.TotalTimeMs / 1000.0:F2} s");
         }
     }
 

@@ -23,7 +23,7 @@ internal static class Program
     {
         Option<string> benchmarkSceneOption = new("--benchmark")
         {
-            Description = $"Run the specific scene in benchmark mode for a fixed number of frames, collect performance metrics, and output them to a file." +
+            Description = $"Run the specific scene in benchmark mode for a fixed duration, collect performance metrics, and output them to a file." +
                           $"Valid scene ids are: {string.Join(", ", SceneRegistry.CreateBenchmarks().SceneIds)}"
         };
 
@@ -33,24 +33,24 @@ internal static class Program
             Description = "Benchmark output file path"
         };
 
-        Option<int> benchmarkWarmupOption = new("--benchmark-warmup")
+        Option<double> benchmarkWarmupSecondsOption = new("--benchmark-warmup-seconds")
         {
-            DefaultValueFactory = _ => 20_000,
-            Description = "Warm-up frame count"
+            DefaultValueFactory = _ => 10.0,
+            Description = "Warm-up duration in seconds"
         };
 
-        Option<int> benchmarkSamplesOption = new("--benchmark-samples")
+        Option<double> benchmarkSampleSecondsOption = new("--benchmark-sample-seconds")
         {
-            DefaultValueFactory = _ => 100_000,
-            Description = "Sample frame count"
+            DefaultValueFactory = _ => 50.0,
+            Description = "Sample duration in seconds"
         };
 
         RootCommand root = new("Silt Rendering Engine")
         {
             benchmarkSceneOption,
             benchmarkOutOption,
-            benchmarkWarmupOption,
-            benchmarkSamplesOption
+            benchmarkWarmupSecondsOption,
+            benchmarkSampleSecondsOption
         };
 
         root.SetAction(parseResult =>
@@ -59,8 +59,8 @@ internal static class Program
             {
                 BenchmarkEnabled = parseResult.GetValue(benchmarkSceneOption) != null,
                 BenchmarkOutputFilePath = parseResult.GetValue(benchmarkOutOption),
-                BenchmarkWarmUpFrameCount = parseResult.GetValue(benchmarkWarmupOption),
-                BenchmarkSampleFrameCount = parseResult.GetValue(benchmarkSamplesOption),
+                BenchmarkWarmUpSeconds = parseResult.GetValue(benchmarkWarmupSecondsOption),
+                BenchmarkSampleSeconds = parseResult.GetValue(benchmarkSampleSecondsOption),
                 BenchmarkSceneId = parseResult.GetValue(benchmarkSceneOption)
             };
 

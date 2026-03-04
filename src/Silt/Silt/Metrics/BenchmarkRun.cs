@@ -3,60 +3,82 @@ using Serilog;
 
 namespace Silt.Metrics;
 
-public readonly struct BenchmarkConfig(string outputFilePath, Action? onComplete, int warmUpFrameCount = 20_000, int sampleFrameCount = 100_000)
+public readonly struct BenchmarkConfig(string outputFilePath, Action? onComplete, double warmUpSeconds = 10.0, double sampleSeconds = 50.0)
 {
     public readonly string OutputFilePath = outputFilePath;
     public readonly Action? OnComplete = onComplete;
-    public readonly int WarmUpFrameCount = warmUpFrameCount;
-    public readonly int SampleFrameCount = sampleFrameCount;
+
+    public readonly double WarmUpSeconds = warmUpSeconds;
+    public readonly double SampleSeconds = sampleSeconds;
 }
 
-public class BenchmarkRun
+public sealed class BenchmarkRun
 {
     public BenchmarkConfig Config { get; set; }
-    public bool IsComplete => SampleFrameCount >= Config.SampleFrameCount;
-    public bool IsWarmingUp => WarmUpFrameCount < Config.WarmUpFrameCount;
+
+    public bool IsComplete => SampleTimeMs >= _sampleTargetMs;
+    public bool IsWarmingUp => WarmUpTimeMs < _warmUpTargetMs;
+
     public double FrameMsAvg { get; private set; }
     public double FrameMsMin { get; private set; }
     public double FrameMsMax { get; private set; }
     public double TotalTimeMs { get; private set; }
+
+    public double WarmUpTimeMs { get; private set; }
+    public double SampleTimeMs { get; private set; }
     public int WarmUpFrameCount { get; private set; }
     public int SampleFrameCount { get; private set; }
 
+    private readonly double _warmUpTargetMs;
+    private readonly double _sampleTargetMs;
     // Preallocated storage for benchmark samples and scratch for percentile.
     private readonly double[] _samplesMs;
     private readonly double[] _scratchMs;
+    
+    private const int MAX_SAMPLES_PER_SECOND = 3072;
 
 
     public BenchmarkRun(BenchmarkConfig config)
     {
         Config = config;
+
         FrameMsAvg = 0;
         FrameMsMin = double.MaxValue;
         FrameMsMax = double.MinValue;
         TotalTimeMs = 0;
+
+        WarmUpTimeMs = 0;
+        SampleTimeMs = 0;
         WarmUpFrameCount = 0;
         SampleFrameCount = 0;
 
-        _samplesMs = new double[Math.Max(1, config.SampleFrameCount)];
+        _warmUpTargetMs = Math.Max(0, Config.WarmUpSeconds) * 1000.0;
+        _sampleTargetMs = Math.Max(0, Config.SampleSeconds) * 1000.0;
+
+        _samplesMs = new double[(int)(Config.SampleSeconds * MAX_SAMPLES_PER_SECOND)];
         _scratchMs = new double[_samplesMs.Length];
     }
 
 
     public void Update(double frameMs)
     {
-        if (IsWarmingUp)
-        {
-            WarmUpFrameCount++;
+        if (double.IsNaN(frameMs) || double.IsInfinity(frameMs) || frameMs <= 0)
             return;
-        }
 
         if (IsComplete)
             return;
 
+        if (IsWarmingUp)
+        {
+            WarmUpTimeMs += frameMs;
+            WarmUpFrameCount++;
+            return;
+        }
+
         // Record sample
         _samplesMs[SampleFrameCount] = frameMs;
         TotalTimeMs += frameMs;
+        SampleTimeMs += frameMs;
         SampleFrameCount++;
 
         // Update aggregates
@@ -67,10 +89,12 @@ public class BenchmarkRun
         if (IsComplete)
         {
             double frameMsP99 = PercentileHelper.P99FromSamples(_samplesMs, _scratchMs, SampleFrameCount);
-            
+
             string output = $"mode=benchmark\n" +
-                            $"warmup_frames={Config.WarmUpFrameCount}\n" +
-                            $"sample_frames={Config.SampleFrameCount}\n" +
+                            $"warmup_seconds={Config.WarmUpSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                            $"sample_seconds={Config.SampleSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                            $"warmup_frames={WarmUpFrameCount}\n" +
+                            $"sample_frames={SampleFrameCount}\n" +
                             $"frame_ms_avg={FrameMsAvg.ToString("F4", CultureInfo.InvariantCulture)}\n" +
                             $"frame_ms_min={FrameMsMin.ToString("F4", CultureInfo.InvariantCulture)}\n" +
                             $"frame_ms_max={FrameMsMax.ToString("F4", CultureInfo.InvariantCulture)}\n" +

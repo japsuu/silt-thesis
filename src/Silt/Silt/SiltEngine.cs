@@ -88,8 +88,8 @@ public sealed class SiltEngine
             PerfMonitor.Initialize(new BenchmarkConfig(
                 outputPath,
                 onComplete: () => _isExitRequested = true,
-                warmUpFrameCount: _options.BenchmarkWarmUpFrameCount,
-                sampleFrameCount: _options.BenchmarkSampleFrameCount));
+                warmUpSeconds: _options.BenchmarkWarmUpSeconds,
+                sampleSeconds: _options.BenchmarkSampleSeconds));
         }
         else
         {
