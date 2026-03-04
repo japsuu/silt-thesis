@@ -29,7 +29,7 @@ internal static class Program
 
         Option<string> benchmarkOutOption = new("--benchmark-out")
         {
-            DefaultValueFactory = _ => "benchmark_results.json",
+            DefaultValueFactory = _ => "benchmark_results.txt",
             Description = "Benchmark output file path"
         };
 
