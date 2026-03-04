@@ -62,26 +62,59 @@ public sealed class StatsWindow : IUiWindow
 
         BenchmarkRun run = PerfMonitor.BenchmarkRun;
 
-        double warmupTargetS = Math.Max(0, run.Config.WarmUpSeconds);
-        double sampleTargetS = Math.Max(0, run.Config.SampleSeconds);
-        double warmupS = run.WarmUpTimeMs / 1000.0;
-        double sampleS = run.SampleTimeMs / 1000.0;
+        // Phase progress
+        double warmupMeshingTargetS = Math.Max(0, run.Config.WarmUpMeshingSeconds);
+        double sampleMeshingTargetS = Math.Max(0, run.Config.SampleMeshingSeconds);
+        double warmupRenderingTargetS = Math.Max(0, run.Config.WarmUpRenderingSeconds);
+        double sampleRenderingTargetS = Math.Max(0, run.Config.SampleRenderingSeconds);
 
-        if (run.IsWarmingUp)
+        double warmupMeshingS = run.WarmUpMeshingTimeMs / 1000.0;
+        double sampleMeshingS = run.SampleMeshingTimeMs / 1000.0;
+        double warmupRenderingS = run.WarmUpRenderingTimeMs / 1000.0;
+        double sampleRenderingS = run.SampleRenderingTimeMs / 1000.0;
+
+        ImGui.TextUnformatted($"State: {run.State}");
+
+        switch (run.State)
         {
-            ImGui.TextUnformatted($"Warming up... ({warmupS:F2}/{warmupTargetS:F2} s, frames={run.WarmUpFrameCount:N0})");
-        }
-        else
-        {
-            ImGui.TextUnformatted($"Collecting benchmark data... ({sampleS:F2}/{sampleTargetS:F2} s, frames={run.SampleFrameCount:N0})");
+            case BenchmarkState.MeshingWarmup:
+                ImGui.TextUnformatted($"Warming up meshing... ({warmupMeshingS:F2}/{warmupMeshingTargetS:F2} s, frames={run.WarmUpMeshingFrameCount:N0})");
+                break;
 
-            double bFpsAvg = run.FrameMsAvg > 0 ? 1000.0 / run.FrameMsAvg : 0;
-            double bFpsMin = run.FrameMsMax > 0 ? 1000.0 / run.FrameMsMax : 0;
-            double bFpsMax = run.FrameMsMin > 0 ? 1000.0 / run.FrameMsMin : 0;
+            case BenchmarkState.MeshingSample:
+                ImGui.TextUnformatted($"Sampling meshing... ({sampleMeshingS:F2}/{sampleMeshingTargetS:F2} s, frames={run.SampleMeshingFrameCount:N0})");
+                break;
 
-            ImGui.TextUnformatted($"Frame avg    : {run.FrameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
-            ImGui.TextUnformatted($"Frame min/max: {run.FrameMsMin:F2} ms ({bFpsMax:F1} FPS) / {run.FrameMsMax:F2} ms ({bFpsMin:F1} FPS)");
-            ImGui.TextUnformatted($"Total sample time: {run.TotalTimeMs / 1000.0:F2} s");
+            case BenchmarkState.RenderingWarmup:
+                ImGui.TextUnformatted($"Warming up rendering... ({warmupRenderingS:F2}/{warmupRenderingTargetS:F2} s, frames={run.WarmUpRenderingFrameCount:N0})");
+                break;
+
+            case BenchmarkState.RenderingSample:
+            {
+                ImGui.TextUnformatted($"Sampling rendering... ({sampleRenderingS:F2}/{sampleRenderingTargetS:F2} s, frames={run.SampleRenderingFrameCount:N0})");
+
+                double frameMsAvg = run.RenderingFrameMsAvg;
+                double frameMsMin = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMin : 0;
+                double frameMsMax = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMax : 0;
+
+                double bFpsAvg = frameMsAvg > 0 ? 1000.0 / frameMsAvg : 0;
+                double bFpsMin = frameMsMax > 0 ? 1000.0 / frameMsMax : 0;
+                double bFpsMax = frameMsMin > 0 ? 1000.0 / frameMsMin : 0;
+
+                ImGui.TextUnformatted($"Frame avg    : {frameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
+                ImGui.TextUnformatted($"Frame min/max: {frameMsMin:F2} ms ({bFpsMax:F1} FPS) / {frameMsMax:F2} ms ({bFpsMin:F1} FPS)");
+                ImGui.TextUnformatted($"Total sample time: {run.SampleRenderingTimeMs / 1000.0:F2} s");
+                break;
+            }
+
+            case BenchmarkState.Complete:
+                ImGui.TextUnformatted("Complete.");
+                break;
+
+            case BenchmarkState.NotStarted:
+            default:
+                ImGui.TextUnformatted("Not started.");
+                break;
         }
     }
 

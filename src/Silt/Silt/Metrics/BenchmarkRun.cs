@@ -3,38 +3,73 @@ using Serilog;
 
 namespace Silt.Metrics;
 
-public readonly struct BenchmarkConfig(string outputFilePath, Action? onComplete, double warmUpSeconds = 10.0, double sampleSeconds = 50.0)
+public readonly struct BenchmarkConfig(
+    string outputFilePath,
+    Action? onComplete,
+    double warmUpMeshingSeconds = 10.0,
+    double sampleMeshingSeconds = 10.0,
+    double warmUpRenderingSeconds = 10.0,
+    double sampleRenderingSeconds = 30.0)
 {
     public readonly string OutputFilePath = outputFilePath;
     public readonly Action? OnComplete = onComplete;
 
-    public readonly double WarmUpSeconds = warmUpSeconds;
-    public readonly double SampleSeconds = sampleSeconds;
+    public readonly double WarmUpMeshingSeconds = warmUpMeshingSeconds;
+    public readonly double SampleMeshingSeconds = sampleMeshingSeconds;
+    public readonly double WarmUpRenderingSeconds = warmUpRenderingSeconds;
+    public readonly double SampleRenderingSeconds = sampleRenderingSeconds;
+}
+
+public enum BenchmarkState
+{
+    NotStarted,
+    MeshingWarmup,
+    MeshingSample,
+    RenderingWarmup,
+    RenderingSample,
+    Complete
 }
 
 public sealed class BenchmarkRun
 {
     public BenchmarkConfig Config { get; set; }
 
-    public bool IsComplete => SampleTimeMs >= _sampleTargetMs;
-    public bool IsWarmingUp => WarmUpTimeMs < _warmUpTargetMs;
+    public BenchmarkState State { get; private set; } = BenchmarkState.NotStarted;
 
-    public double FrameMsAvg { get; private set; }
-    public double FrameMsMin { get; private set; }
-    public double FrameMsMax { get; private set; }
-    public double TotalTimeMs { get; private set; }
+    public bool IsComplete => State == BenchmarkState.Complete;
 
-    public double WarmUpTimeMs { get; private set; }
-    public double SampleTimeMs { get; private set; }
-    public int WarmUpFrameCount { get; private set; }
-    public int SampleFrameCount { get; private set; }
+    /// <summary>
+    /// Fired whenever the benchmark transitions to a new state.
+    /// </summary>
+    public event Action<BenchmarkState>? OnStateChanged;
 
-    private readonly double _warmUpTargetMs;
-    private readonly double _sampleTargetMs;
-    // Preallocated storage for benchmark samples and scratch for percentile.
-    private readonly double[] _samplesMs;
-    private readonly double[] _scratchMs;
-    
+    // Rendering (frame time) stats during RenderingSample
+    public double RenderingFrameMsAvg { get; private set; }
+    public double RenderingFrameMsMin { get; private set; }
+    public double RenderingFrameMsMax { get; private set; }
+    public double RenderingTotalTimeMs { get; private set; }
+    public int RenderingSampleFrameCount { get; private set; }
+
+    // Phase timing and counts for reporting
+    public double WarmUpMeshingTimeMs { get; private set; }
+    public double SampleMeshingTimeMs { get; private set; }
+    public double WarmUpRenderingTimeMs { get; private set; }
+    public double SampleRenderingTimeMs { get; private set; }
+
+    public int WarmUpMeshingFrameCount { get; private set; }
+    public int SampleMeshingFrameCount { get; private set; }
+    public int WarmUpRenderingFrameCount { get; private set; }
+    public int SampleRenderingFrameCount { get; private set; }
+
+    private readonly double _warmUpMeshingTargetMs;
+    private readonly double _sampleMeshingTargetMs;
+    private readonly double _warmUpRenderingTargetMs;
+    private readonly double _sampleRenderingTargetMs;
+
+    // Preallocated storage for rendering samples and scratch for percentile.
+    private readonly double[] _renderingSamplesMs;
+    private readonly double[] _renderingScratchMs;
+
     private const int MAX_SAMPLES_PER_SECOND = 3072;
 
 
@@ -42,21 +77,31 @@ public sealed class BenchmarkRun
     {
         Config = config;
 
-        FrameMsAvg = 0;
-        FrameMsMin = double.MaxValue;
-        FrameMsMax = double.MinValue;
-        TotalTimeMs = 0;
+        RenderingFrameMsAvg = 0;
+        RenderingFrameMsMin = double.MaxValue;
+        RenderingFrameMsMax = double.MinValue;
+        RenderingTotalTimeMs = 0;
+        RenderingSampleFrameCount = 0;
 
-        WarmUpTimeMs = 0;
-        SampleTimeMs = 0;
-        WarmUpFrameCount = 0;
-        SampleFrameCount = 0;
+        WarmUpMeshingTimeMs = 0;
+        SampleMeshingTimeMs = 0;
+        WarmUpRenderingTimeMs = 0;
+        SampleRenderingTimeMs = 0;
 
-        _warmUpTargetMs = Math.Max(0, Config.WarmUpSeconds) * 1000.0;
-        _sampleTargetMs = Math.Max(0, Config.SampleSeconds) * 1000.0;
+        WarmUpMeshingFrameCount = 0;
+        SampleMeshingFrameCount = 0;
+        WarmUpRenderingFrameCount = 0;
+        SampleRenderingFrameCount = 0;
 
-        _samplesMs = new double[(int)(Config.SampleSeconds * MAX_SAMPLES_PER_SECOND)];
-        _scratchMs = new double[_samplesMs.Length];
+        _warmUpMeshingTargetMs = Math.Max(0, Config.WarmUpMeshingSeconds) * 1000.0;
+        _sampleMeshingTargetMs = Math.Max(0, Config.SampleMeshingSeconds) * 1000.0;
+        _warmUpRenderingTargetMs = Math.Max(0, Config.WarmUpRenderingSeconds) * 1000.0;
+        _sampleRenderingTargetMs = Math.Max(0, Config.SampleRenderingSeconds) * 1000.0;
+
+        _renderingSamplesMs = new double[(int)(Math.Max(0, Config.SampleRenderingSeconds) * MAX_SAMPLES_PER_SECOND)];
+        _renderingScratchMs = new double[_renderingSamplesMs.Length];
+
+        TransitionTo(BenchmarkState.MeshingWarmup);
     }
 
 
@@ -68,43 +113,100 @@ public sealed class BenchmarkRun
         if (IsComplete)
             return;
 
-        if (IsWarmingUp)
+        switch (State)
         {
-            WarmUpTimeMs += frameMs;
-            WarmUpFrameCount++;
+            case BenchmarkState.MeshingWarmup:
+                WarmUpMeshingTimeMs += frameMs;
+                WarmUpMeshingFrameCount++;
+                if (WarmUpMeshingTimeMs >= _warmUpMeshingTargetMs)
+                    TransitionTo(BenchmarkState.MeshingSample);
+                break;
+
+            case BenchmarkState.MeshingSample:
+                SampleMeshingTimeMs += frameMs;
+                SampleMeshingFrameCount++;
+                if (SampleMeshingTimeMs >= _sampleMeshingTargetMs)
+                    TransitionTo(BenchmarkState.RenderingWarmup);
+                break;
+
+            case BenchmarkState.RenderingWarmup:
+                WarmUpRenderingTimeMs += frameMs;
+                WarmUpRenderingFrameCount++;
+                if (WarmUpRenderingTimeMs >= _warmUpRenderingTargetMs)
+                    TransitionTo(BenchmarkState.RenderingSample);
+                break;
+
+            case BenchmarkState.RenderingSample:
+            {
+                // Record rendering sample
+                _renderingSamplesMs[RenderingSampleFrameCount] = frameMs;
+                RenderingTotalTimeMs += frameMs;
+                SampleRenderingTimeMs += frameMs;
+                RenderingSampleFrameCount++;
+                SampleRenderingFrameCount++;
+
+                // Update rendering aggregates
+                RenderingFrameMsMin = Math.Min(RenderingFrameMsMin, frameMs);
+                RenderingFrameMsMax = Math.Max(RenderingFrameMsMax, frameMs);
+                RenderingFrameMsAvg = RenderingSampleFrameCount > 0 ? RenderingTotalTimeMs / RenderingSampleFrameCount : 0;
+
+                if (SampleRenderingTimeMs >= _sampleRenderingTargetMs)
+                {
+                    CompleteAndWriteResults();
+                    TransitionTo(BenchmarkState.Complete);
+                }
+
+                break;
+            }
+
+            case BenchmarkState.NotStarted:
+            case BenchmarkState.Complete:
+            default:
+                break;
+        }
+    }
+
+
+    private void TransitionTo(BenchmarkState newState)
+    {
+        if (State == newState)
             return;
-        }
 
-        // Record sample
-        _samplesMs[SampleFrameCount] = frameMs;
-        TotalTimeMs += frameMs;
-        SampleTimeMs += frameMs;
-        SampleFrameCount++;
+        State = newState;
+        OnStateChanged?.Invoke(newState);
+    }
 
-        // Update aggregates
-        FrameMsMin = Math.Min(FrameMsMin, frameMs);
-        FrameMsMax = Math.Max(FrameMsMax, frameMs);
-        FrameMsAvg = SampleFrameCount > 0 ? TotalTimeMs / SampleFrameCount : 0;
 
-        if (IsComplete)
-        {
-            double frameMsP99 = PercentileHelper.P99FromSamples(_samplesMs, _scratchMs, SampleFrameCount);
+    private void CompleteAndWriteResults()
+    {
+        double renderingP99 = RenderingSampleFrameCount > 0
+            ? PercentileHelper.P99FromSamples(_renderingSamplesMs, _renderingScratchMs, RenderingSampleFrameCount)
+            : 0;
 
-            string output = $"mode=benchmark\n" +
-                            $"warmup_seconds={Config.WarmUpSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"sample_seconds={Config.SampleSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"warmup_frames={WarmUpFrameCount}\n" +
-                            $"sample_frames={SampleFrameCount}\n" +
-                            $"frame_ms_avg={FrameMsAvg.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"frame_ms_min={FrameMsMin.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"frame_ms_max={FrameMsMax.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"frame_ms_p99={frameMsP99.ToString("F4", CultureInfo.InvariantCulture)}\n" +
-                            $"total_time_ms={TotalTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n";
+        MeshingStats meshing = PerfMonitor.BenchmarkChunkMeshing!;
+        string meshingBlock = meshing.FormatInvariant("chunk_meshing");
 
-            File.WriteAllText(Config.OutputFilePath, output);
-            string fullPath = Path.GetFullPath(Config.OutputFilePath);
-            Log.Information("Benchmark complete. Results written to {OutputFilePath}", fullPath);
-            Config.OnComplete?.Invoke();
-        }
+        string output = $"mode=benchmark\n" +
+                        $"rendering_warmup_seconds={Config.WarmUpRenderingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_warmup_frames={WarmUpRenderingFrameCount}\n" +
+                        $"rendering_sample_seconds={Config.SampleRenderingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_sample_frames={SampleRenderingFrameCount}\n" +
+                        $"rendering_frame_ms_avg={RenderingFrameMsAvg.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_frame_ms_min={(RenderingSampleFrameCount > 0 ? RenderingFrameMsMin : 0).ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_frame_ms_max={(RenderingSampleFrameCount > 0 ? RenderingFrameMsMax : 0).ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_frame_ms_p99={renderingP99.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"rendering_time_total_ms={SampleRenderingTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        "\n" +
+                        $"meshing_warmup_seconds={Config.WarmUpMeshingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"meshing_warmup_frames={WarmUpMeshingFrameCount}\n" +
+                        $"meshing_sample_seconds={Config.SampleMeshingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        $"meshing_sample_frames={SampleMeshingFrameCount}\n" +
+                        meshingBlock +
+                        $"meshing_time_total_ms={SampleMeshingTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n";
+
+        File.WriteAllText(Config.OutputFilePath, output);
+        string fullPath = Path.GetFullPath(Config.OutputFilePath);
+        Log.Information("Benchmark complete. Results written to {OutputFilePath}", fullPath);
+        Config.OnComplete?.Invoke();
     }
 }

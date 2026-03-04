@@ -9,6 +9,9 @@ public sealed class AppOptions
     public string? BenchmarkSceneId { get; init; }
     public string? BenchmarkOutputFilePath { get; init; }
 
-    public double BenchmarkWarmUpSeconds { get; init; }
-    public double BenchmarkSampleSeconds { get; init; }
+    public double BenchmarkWarmUpMeshingSeconds { get; init; }
+    public double BenchmarkSampleMeshingSeconds { get; init; }
+
+    public double BenchmarkWarmUpRenderingSeconds { get; init; }
+    public double BenchmarkSampleRenderingSeconds { get; init; }
 }

@@ -88,8 +88,10 @@ public sealed class SiltEngine
             PerfMonitor.Initialize(new BenchmarkConfig(
                 outputPath,
                 onComplete: () => _isExitRequested = true,
-                warmUpSeconds: _options.BenchmarkWarmUpSeconds,
-                sampleSeconds: _options.BenchmarkSampleSeconds));
+                warmUpMeshingSeconds: _options.BenchmarkWarmUpMeshingSeconds,
+                sampleMeshingSeconds: _options.BenchmarkSampleMeshingSeconds,
+                warmUpRenderingSeconds: _options.BenchmarkWarmUpRenderingSeconds,
+                sampleRenderingSeconds: _options.BenchmarkSampleRenderingSeconds));
         }
         else
         {

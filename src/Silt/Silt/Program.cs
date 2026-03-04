@@ -33,24 +33,38 @@ internal static class Program
             Description = "Benchmark output file path"
         };
 
-        Option<double> benchmarkWarmupSecondsOption = new("--benchmark-warmup-seconds")
+        Option<double> benchmarkWarmupMeshingSecondsOption = new("--benchmark-warmup-meshing-seconds")
         {
             DefaultValueFactory = _ => 10.0,
-            Description = "Warm-up duration in seconds"
+            Description = "Warm-up duration (seconds) for the meshing phase"
         };
 
-        Option<double> benchmarkSampleSecondsOption = new("--benchmark-sample-seconds")
+        Option<double> benchmarkSampleMeshingSecondsOption = new("--benchmark-sample-meshing-seconds")
         {
-            DefaultValueFactory = _ => 50.0,
-            Description = "Sample duration in seconds"
+            DefaultValueFactory = _ => 10.0,
+            Description = "Sample duration (seconds) for the meshing phase"
+        };
+
+        Option<double> benchmarkWarmupRenderingSecondsOption = new("--benchmark-warmup-rendering-seconds")
+        {
+            DefaultValueFactory = _ => 10.0,
+            Description = "Warm-up duration (seconds) for the rendering phase"
+        };
+
+        Option<double> benchmarkSampleRenderingSecondsOption = new("--benchmark-sample-rendering-seconds")
+        {
+            DefaultValueFactory = _ => 30.0,
+            Description = "Sample duration (seconds) for the rendering phase"
         };
 
         RootCommand root = new("Silt Rendering Engine")
         {
             benchmarkSceneOption,
             benchmarkOutOption,
-            benchmarkWarmupSecondsOption,
-            benchmarkSampleSecondsOption
+            benchmarkWarmupMeshingSecondsOption,
+            benchmarkSampleMeshingSecondsOption,
+            benchmarkWarmupRenderingSecondsOption,
+            benchmarkSampleRenderingSecondsOption
         };
 
         root.SetAction(parseResult =>
@@ -59,8 +73,10 @@ internal static class Program
             {
                 BenchmarkEnabled = parseResult.GetValue(benchmarkSceneOption) != null,
                 BenchmarkOutputFilePath = parseResult.GetValue(benchmarkOutOption),
-                BenchmarkWarmUpSeconds = parseResult.GetValue(benchmarkWarmupSecondsOption),
-                BenchmarkSampleSeconds = parseResult.GetValue(benchmarkSampleSecondsOption),
+                BenchmarkWarmUpMeshingSeconds = parseResult.GetValue(benchmarkWarmupMeshingSecondsOption),
+                BenchmarkSampleMeshingSeconds = parseResult.GetValue(benchmarkSampleMeshingSecondsOption),
+                BenchmarkWarmUpRenderingSeconds = parseResult.GetValue(benchmarkWarmupRenderingSecondsOption),
+                BenchmarkSampleRenderingSeconds = parseResult.GetValue(benchmarkSampleRenderingSecondsOption),
                 BenchmarkSceneId = parseResult.GetValue(benchmarkSceneOption)
             };
 
