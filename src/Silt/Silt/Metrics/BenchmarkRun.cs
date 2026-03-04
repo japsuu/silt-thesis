@@ -60,6 +60,8 @@ public sealed class BenchmarkRun
     public int SampleMeshingFrameCount { get; private set; }
     public int WarmUpRenderingFrameCount { get; private set; }
     public int SampleRenderingFrameCount { get; private set; }
+    
+    public double TotalTimeMs { get; private set; }
 
     private readonly double _warmUpMeshingTargetMs;
     private readonly double _sampleMeshingTargetMs;
@@ -92,6 +94,8 @@ public sealed class BenchmarkRun
         SampleMeshingFrameCount = 0;
         WarmUpRenderingFrameCount = 0;
         SampleRenderingFrameCount = 0;
+        
+        TotalTimeMs = 0;
 
         _warmUpMeshingTargetMs = Math.Max(0, Config.WarmUpMeshingSeconds) * 1000.0;
         _sampleMeshingTargetMs = Math.Max(0, Config.SampleMeshingSeconds) * 1000.0;
@@ -112,6 +116,8 @@ public sealed class BenchmarkRun
 
         if (IsComplete)
             return;
+        
+        TotalTimeMs += frameMs;
 
         switch (State)
         {
@@ -202,7 +208,9 @@ public sealed class BenchmarkRun
                         $"meshing_sample_seconds={Config.SampleMeshingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
                         $"meshing_sample_frames={SampleMeshingFrameCount}\n" +
                         meshingBlock +
-                        $"meshing_time_total_ms={SampleMeshingTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n";
+                        $"meshing_time_total_ms={SampleMeshingTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        "\n" +
+                        $"total_time_ms={TotalTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n";
 
         File.WriteAllText(Config.OutputFilePath, output);
         string fullPath = Path.GetFullPath(Config.OutputFilePath);

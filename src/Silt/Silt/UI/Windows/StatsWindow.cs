@@ -103,7 +103,7 @@ public sealed class StatsWindow : IUiWindow
 
                 ImGui.TextUnformatted($"Frame avg    : {frameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
                 ImGui.TextUnformatted($"Frame min/max: {frameMsMin:F2} ms ({bFpsMax:F1} FPS) / {frameMsMax:F2} ms ({bFpsMin:F1} FPS)");
-                ImGui.TextUnformatted($"Total sample time: {run.SampleRenderingTimeMs / 1000.0:F2} s");
+                ImGui.TextUnformatted($"Total benchmark time: {run.TotalTimeMs / 1000.0:F2} s");
                 break;
             }
 
