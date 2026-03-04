@@ -96,6 +96,14 @@ public class Camera
     /// </summary>
     /// <returns>The projection matrix.</returns>
     public Matrix4x4 GetProjectionMatrix() => Matrix4x4.CreatePerspectiveFieldOfView(MathUtil.DegreesToRadians(Fov), WindowInfo.ClientAspectRatio, NearPlane, FarPlane);
+    
+    
+    public void LookAt(Vector3 target)
+    {
+        Vector3 direction = Vector3.Normalize(target - Position);
+        Pitch = MathUtil.RadiansToDegrees(MathF.Asin(direction.Y));
+        Yaw = MathUtil.RadiansToDegrees(MathF.Atan2(direction.Z, direction.X));
+    }
 
 
     private void UpdateDirectionVectors()
