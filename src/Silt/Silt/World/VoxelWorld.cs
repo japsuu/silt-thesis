@@ -388,7 +388,7 @@ public static class ChunkMesher
                     // Z+ face
                     _vertices[_vertexDataCount++] = baseX;
                     _vertices[_vertexDataCount++] = baseY;
-                    _vertices[_vertexDataCount++] = baseZ;
+                    _vertices[_vertexDataCount++] = baseZ + 1;
                     _vertices[_vertexDataCount++] = r;
                     _vertices[_vertexDataCount++] = g;
                     _vertices[_vertexDataCount++] = b;
