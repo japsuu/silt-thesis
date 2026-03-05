@@ -41,7 +41,7 @@ internal static class Program
 
         Option<double> benchmarkSampleMeshingSecondsOption = new("--benchmark-sample-meshing-seconds")
         {
-            DefaultValueFactory = _ => 10.0,
+            DefaultValueFactory = _ => 30.0,
             Description = "Sample duration (seconds) for the meshing phase"
         };
 
