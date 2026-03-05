@@ -37,7 +37,7 @@ public sealed class BenchmarkScene : Scene
         _world.Generate();
 
         PerfMonitor.BenchmarkStateChanged += OnBenchmarkStateChanged;
-        PerfMonitor.StartBenchmark(3);
+        PerfMonitor.Start(3);
     }
 
 
