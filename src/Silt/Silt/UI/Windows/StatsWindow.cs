@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using ImGuiNET;
+using Silt.CameraManagement;
 using Silt.Metrics;
 using Silt.Platform;
 
@@ -52,6 +53,11 @@ public sealed class StatsWindow : IUiWindow
             ImGui.TextUnformatted($"Version: {SystemInfo.GPUVersion}");
             ImGui.TextUnformatted($"GLSL: {SystemInfo.GlslVersion}");
         }
+        
+        ImGui.Separator();
+        ImGui.TextUnformatted("Camera");
+        Camera cam = CameraManager.MainCamera;
+        ImGui.TextUnformatted($"Position: {cam.Position.X:F2}, {cam.Position.Y:F2}, {cam.Position.Z:F2}");
     }
 
 
