@@ -216,6 +216,12 @@ public sealed class Chunk : IDisposable
 {
     public const int SIZE = 32;
     
+    /// <summary>Size of a single Voxel struct in bytes</summary>
+    public const int VOXEL_SIZE_BYTES = sizeof(int) + sizeof(float) + sizeof(int) + sizeof(int);
+    
+    /// <summary>Size of the voxel data for an entire chunk in bytes</summary>
+    public const int VOXEL_DATA_BYTES_PER_CHUNK = SIZE * SIZE * SIZE * VOXEL_SIZE_BYTES;
+    
     public readonly Vector3D<int> Position;
     public readonly Vector3D<int> WorldPosition;
     public readonly Voxel[,,] Voxels;
@@ -239,11 +245,19 @@ public sealed class Chunk : IDisposable
     {
         long startTicks = Stopwatch.GetTimestamp();
 
-        UpdateMesh();
+        VoxelMeshData meshData = ChunkMesher.MeshChunk(this);
+        _renderer.UpdateMeshData(meshData);
 
         long endTicks = Stopwatch.GetTimestamp();
         double ms = (endTicks - startTicks) * 1000.0 / Stopwatch.Frequency;
         PerfMonitor.AddChunkMeshingSample(ms);
+        
+        // Record per-chunk geometry statistics
+        int vertexCount = meshData.Vertices.Length / ChunkMesher.VERTEX_SIZE_ELEMENTS;
+        int triangleCount = meshData.Indices.Length / 3;
+        long meshBytes = meshData.Vertices.Length * ChunkMesher.VERTEX_ELEMENT_SIZE_BYTES
+                         + meshData.Indices.Length * ChunkMesher.INDEX_ELEMENT_SIZE_BYTES;
+        PerfMonitor.AddChunkStatsSample(vertexCount, triangleCount, meshBytes);
     }
     
     
@@ -339,6 +353,8 @@ public sealed class ChunkRenderer : IDisposable
 public static class ChunkMesher
 {
     public const int VERTEX_SIZE_ELEMENTS = 9;
+    public const int VERTEX_ELEMENT_SIZE_BYTES = sizeof(float);
+    public const int INDEX_ELEMENT_SIZE_BYTES = sizeof(uint);
     
     // Worst case: all voxels are solid and no face culling
     private const int VOXELS_PER_CHUNK = Chunk.SIZE * Chunk.SIZE * Chunk.SIZE;

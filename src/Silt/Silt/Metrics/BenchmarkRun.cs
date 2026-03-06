@@ -298,6 +298,9 @@ public sealed class BenchmarkRun
         MeshingStats meshing = PerfMonitor.BenchmarkChunkMeshing!;
         string meshingBlock = meshing.FormatInvariant("meshing_chunk");
 
+        ChunkStats chunkStats = PerfMonitor.BenchmarkChunkStats!;
+        string chunkStatsBlock = chunkStats.FormatInvariant("chunk");
+
         string output = $"mode=benchmark\n" +
                         $"rendering_target_warmup_seconds={Config.WarmUpRenderingSeconds.ToString("F4", CultureInfo.InvariantCulture)}\n" +
                         $"rendering_warmup_frames={RenderingWarmUpFrameCount}\n" +
@@ -328,6 +331,8 @@ public sealed class BenchmarkRun
                         $"batch_remesh_iteration_ms_max={(BatchRemeshSampleIterations > 0 ? BatchRemeshMaxIterationMs : 0).ToString("F4", CultureInfo.InvariantCulture)}\n" +
                         $"batch_remesh_total_time_ms={BatchRemeshTotalTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n" +
                         $"batch_remesh_chunks_per_second={BatchRemeshChunksPerSecond.ToString("F4", CultureInfo.InvariantCulture)}\n" +
+                        "\n" +
+                        chunkStatsBlock +
                         "\n" +
                         $"benchmark_time_total_ms={TotalTimeMs.ToString("F4", CultureInfo.InvariantCulture)}\n";
 

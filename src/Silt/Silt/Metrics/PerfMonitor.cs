@@ -56,6 +56,12 @@ public static class PerfMonitor
     /// </summary>
     public static MeshingStats? BenchmarkChunkMeshing { get; private set; }
 
+    /// <summary>
+    /// Aggregated chunk geometry and memory statistics for the current benchmark run.
+    /// Null in runtime mode.
+    /// </summary>
+    public static ChunkStats? BenchmarkChunkStats { get; private set; }
+
     private static bool _isCapturing;
     private static bool _isStarted;
     private static int _skipFrames;
@@ -77,6 +83,9 @@ public static class PerfMonitor
             BenchmarkChunkMeshing ??= new MeshingStats();
             BenchmarkChunkMeshing.Reset();
 
+            BenchmarkChunkStats ??= new ChunkStats();
+            BenchmarkChunkStats.Reset();
+
             Log.Information("Performance metrics initialized in BENCHMARK mode. Output file: {OutputFilePath}", benchmarkConfig.Value.OutputFilePath);
         }
         else
@@ -84,6 +93,7 @@ public static class PerfMonitor
             Mode = PerfMonitorMode.Runtime;
             BenchmarkRun = null;
             BenchmarkChunkMeshing = null;
+            BenchmarkChunkStats = null;
         }
 
         // Allocate once for the lifetime of the app.
@@ -241,5 +251,45 @@ public static class PerfMonitor
             return;
 
         BenchmarkRun.RecordBatchRemeshIteration(iterationMs, chunkCount);
+    }
+
+
+    /// <summary>
+    /// Sets the chunk info for the benchmark.
+    /// Should be called once when the world is generated during benchmark mode.
+    /// </summary>
+    /// <param name="totalChunkCount">Total number of chunks in the world.</param>
+    /// <param name="voxelDataBytesPerChunk">Size of voxel data per chunk in bytes.</param>
+    public static void SetChunkInfo(int totalChunkCount, int voxelDataBytesPerChunk)
+    {
+        if (Mode != PerfMonitorMode.Benchmark)
+            return;
+
+        BenchmarkChunkStats?.SetChunkInfo(totalChunkCount, voxelDataBytesPerChunk);
+    }
+
+
+    /// <summary>
+    /// Records per-chunk geometry statistics.
+    /// Only captured during <see cref="Metrics.BenchmarkState.MeshingSample"/>.
+    /// </summary>
+    /// <param name="vertexCount">Number of vertices in the chunk mesh.</param>
+    /// <param name="triangleCount">Number of triangles in the chunk mesh.</param>
+    /// <param name="meshBytes">Size of mesh data (VBO + EBO) in bytes.</param>
+    public static void AddChunkStatsSample(int vertexCount, int triangleCount, long meshBytes)
+    {
+        if (!_isCapturing)
+            return;
+
+        if (Mode != PerfMonitorMode.Benchmark)
+            return;
+
+        if (BenchmarkRun == null || BenchmarkRun.IsComplete)
+            return;
+
+        if (BenchmarkRun.State != BenchmarkState.MeshingSample)
+            return;
+
+        BenchmarkChunkStats?.AddSample(vertexCount, triangleCount, meshBytes);
     }
 }

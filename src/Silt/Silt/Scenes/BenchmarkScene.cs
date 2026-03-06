@@ -38,6 +38,10 @@ public sealed class BenchmarkScene : Scene
         
         _world.Generate();
 
+        // Record chunk info for benchmark statistics
+        int totalChunks = _world.ChunkManager.Chunks.Length;
+        PerfMonitor.SetChunkInfo(totalChunks, Chunk.VOXEL_DATA_BYTES_PER_CHUNK);
+
         PerfMonitor.BenchmarkStateChanged += OnBenchmarkStateChanged;
         PerfMonitor.Start(3);
     }
