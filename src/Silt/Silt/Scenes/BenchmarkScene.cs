@@ -2,8 +2,9 @@
 using System.Numerics;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
-using Silt.CameraManagement;
-using Silt.SceneManagement;
+using Silt.CameraControllers;
+using Silt.Core.CameraManagement;
+using Silt.Core.SceneManagement;
 using Silt.World;
 using Silt.Metrics;
 using Silt.World.Generation;

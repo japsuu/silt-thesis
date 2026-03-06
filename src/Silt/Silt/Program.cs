@@ -1,5 +1,5 @@
 ﻿using System.CommandLine;
-using Silt.SceneManagement;
+using Silt.Core.SceneManagement;
 
 namespace Silt;
 

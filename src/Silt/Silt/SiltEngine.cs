@@ -9,14 +9,15 @@ using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.OpenGL.Extensions.ImGui;
 using Silk.NET.Windowing;
-using Silt.CameraManagement;
-using Silt.InputManagement;
+using Silt.Core;
+using Silt.Core.CameraManagement;
+using Silt.Core.InputManagement;
+using Silt.Core.Platform;
+using Silt.Core.SceneManagement;
+using Silt.Core.UI;
 using Silt.Metrics;
-using Silt.Platform;
-using Silt.SceneManagement;
 using Silt.Scenes;
-using Silt.UI;
-using Silt.UI.Windows;
+using Silt.UIWindows;
 
 namespace Silt;
 
