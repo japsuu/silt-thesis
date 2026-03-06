@@ -68,12 +68,12 @@ public class Camera
     /// <summary>
     /// Near clipping plane distance.
     /// </summary>
-    public float NearPlane { get; set; } = 0.1f;
+    public float NearPlane { get; set; } = 50f;
 
     /// <summary>
     /// Far clipping plane distance.
     /// </summary>
-    public float FarPlane { get; set; } = 1000.0f;
+    public float FarPlane { get; set; } = 2000.0f;
 
 
     /// <param name="position">The initial position of the camera.</param>
