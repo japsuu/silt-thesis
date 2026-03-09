@@ -6,35 +6,35 @@ namespace Silt.Metrics;
 public readonly struct BenchmarkConfig(
     string outputFilePath,
     Action? onComplete,
+    double warmUpRenderingSeconds = 10.0,
+    double sampleRenderingSeconds = 30.0,
     double warmUpMeshingSeconds = 10.0,
     double sampleMeshingSeconds = 30.0,
     int batchRemeshWarmupIterations = 3,
-    int batchRemeshSampleIterations = 3,
-    double warmUpRenderingSeconds = 10.0,
-    double sampleRenderingSeconds = 30.0)
+    int batchRemeshSampleIterations = 3)
 {
     public readonly string OutputFilePath = outputFilePath;
     public readonly Action? OnComplete = onComplete;
+
+    public readonly double WarmUpRenderingSeconds = warmUpRenderingSeconds;
+    public readonly double SampleRenderingSeconds = sampleRenderingSeconds;
 
     public readonly double WarmUpMeshingSeconds = warmUpMeshingSeconds;
     public readonly double SampleMeshingSeconds = sampleMeshingSeconds;
     
     public readonly int BatchRemeshWarmupIterations = batchRemeshWarmupIterations;
     public readonly int BatchRemeshSampleIterations = batchRemeshSampleIterations;
-    
-    public readonly double WarmUpRenderingSeconds = warmUpRenderingSeconds;
-    public readonly double SampleRenderingSeconds = sampleRenderingSeconds;
 }
 
 public enum BenchmarkState
 {
     NotStarted,
+    RenderingWarmup,
+    RenderingSample,
     MeshingWarmup,
     MeshingSample,
     BatchRemeshWarmup,
     BatchRemeshSample,
-    RenderingWarmup,
-    RenderingSample,
     Complete
 }
 
@@ -152,7 +152,7 @@ public sealed class BenchmarkRun
         if (State != BenchmarkState.NotStarted)
             throw new InvalidOperationException("BenchmarkRun can only be started once.");
 
-        TransitionTo(BenchmarkState.MeshingWarmup);
+        TransitionTo(BenchmarkState.RenderingWarmup);
     }
 
 
@@ -168,6 +168,32 @@ public sealed class BenchmarkRun
 
         switch (State)
         {
+            case BenchmarkState.RenderingWarmup:
+                RenderingWarmUpTimeMs += frameMs;
+                RenderingWarmUpFrameCount++;
+                if (RenderingWarmUpTimeMs >= _warmUpRenderingTargetMs)
+                    TransitionTo(BenchmarkState.RenderingSample);
+                break;
+
+            case BenchmarkState.RenderingSample:
+            {
+                // Record rendering sample
+                _renderingSamplesMs[RenderingSampleFrameCount] = frameMs;
+                RenderingTotalTimeMs += frameMs;
+                RenderingSampleTimeMs += frameMs;
+                RenderingSampleFrameCount++;
+
+                // Update rendering aggregates
+                RenderingFrameMsMin = Math.Min(RenderingFrameMsMin, frameMs);
+                RenderingFrameMsMax = Math.Max(RenderingFrameMsMax, frameMs);
+                RenderingFrameMsAvg = RenderingSampleFrameCount > 0 ? RenderingTotalTimeMs / RenderingSampleFrameCount : 0;
+
+                if (RenderingSampleTimeMs >= _sampleRenderingTargetMs)
+                    TransitionTo(BenchmarkState.MeshingWarmup);
+
+                break;
+            }
+
             case BenchmarkState.MeshingWarmup:
                 MeshingWarmUpTimeMs += frameMs;
                 MeshingWarmUpFrameCount++;
@@ -195,35 +221,6 @@ public sealed class BenchmarkRun
             case BenchmarkState.BatchRemeshWarmup:
             case BenchmarkState.BatchRemeshSample:
                 break;
-
-            case BenchmarkState.RenderingWarmup:
-                RenderingWarmUpTimeMs += frameMs;
-                RenderingWarmUpFrameCount++;
-                if (RenderingWarmUpTimeMs >= _warmUpRenderingTargetMs)
-                    TransitionTo(BenchmarkState.RenderingSample);
-                break;
-
-            case BenchmarkState.RenderingSample:
-            {
-                // Record rendering sample
-                _renderingSamplesMs[RenderingSampleFrameCount] = frameMs;
-                RenderingTotalTimeMs += frameMs;
-                RenderingSampleTimeMs += frameMs;
-                RenderingSampleFrameCount++;
-
-                // Update rendering aggregates
-                RenderingFrameMsMin = Math.Min(RenderingFrameMsMin, frameMs);
-                RenderingFrameMsMax = Math.Max(RenderingFrameMsMax, frameMs);
-                RenderingFrameMsAvg = RenderingSampleFrameCount > 0 ? RenderingTotalTimeMs / RenderingSampleFrameCount : 0;
-
-                if (RenderingSampleTimeMs >= _sampleRenderingTargetMs)
-                {
-                    CompleteAndWriteResults();
-                    TransitionTo(BenchmarkState.Complete);
-                }
-
-                break;
-            }
 
             case BenchmarkState.NotStarted:
             case BenchmarkState.Complete:
@@ -279,7 +276,10 @@ public sealed class BenchmarkRun
                     BatchRemeshChunksPerSecond = chunkCount / (BatchRemeshAvgIterationMs / 1000.0);
 
                 if (BatchRemeshSampleIterations >= _batchRemeshSampleTargetIterations)
-                    TransitionTo(BenchmarkState.RenderingWarmup);
+                {
+                    CompleteAndWriteResults();
+                    TransitionTo(BenchmarkState.Complete);
+                }
                 break;
         }
     }

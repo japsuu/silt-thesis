@@ -84,6 +84,28 @@ public sealed class StatsWindow : IUiWindow
 
         switch (run.State)
         {
+            case BenchmarkState.RenderingWarmup:
+                ImGui.TextUnformatted($"Warming up rendering... ({warmupRenderingS:F2}/{warmupRenderingTargetS:F2} s, frames={run.RenderingWarmUpFrameCount:N0})");
+                break;
+
+            case BenchmarkState.RenderingSample:
+            {
+                ImGui.TextUnformatted($"Sampling rendering... ({sampleRenderingS:F2}/{sampleRenderingTargetS:F2} s, frames={run.RenderingSampleFrameCount:N0})");
+
+                double frameMsAvg = run.RenderingFrameMsAvg;
+                double frameMsMin = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMin : 0;
+                double frameMsMax = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMax : 0;
+
+                double bFpsAvg = frameMsAvg > 0 ? 1000.0 / frameMsAvg : 0;
+                double bFpsMin = frameMsMax > 0 ? 1000.0 / frameMsMax : 0;
+                double bFpsMax = frameMsMin > 0 ? 1000.0 / frameMsMin : 0;
+
+                ImGui.TextUnformatted($"Frame avg    : {frameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
+                ImGui.TextUnformatted($"Frame min/max: {frameMsMin:F2} ms ({bFpsMax:F1} FPS) / {frameMsMax:F2} ms ({bFpsMin:F1} FPS)");
+                ImGui.TextUnformatted($"Total benchmark time: {run.TotalTimeMs / 1000.0:F2} s");
+                break;
+            }
+
             case BenchmarkState.MeshingWarmup:
                 ImGui.TextUnformatted($"Warming up meshing... ({warmupMeshingS:F2}/{warmupMeshingTargetS:F2} s, frames={run.MeshingWarmUpFrameCount:N0})");
                 break;
@@ -123,28 +145,6 @@ public sealed class StatsWindow : IUiWindow
                 ImGui.TextUnformatted($"Iteration avg    : {iterMsAvg:F2} ms");
                 ImGui.TextUnformatted($"Iteration min/max: {iterMsMin:F2} ms / {iterMsMax:F2} ms");
                 ImGui.TextUnformatted($"Chunks/sec: {run.BatchRemeshChunksPerSecond:F1}");
-                ImGui.TextUnformatted($"Total benchmark time: {run.TotalTimeMs / 1000.0:F2} s");
-                break;
-            }
-
-            case BenchmarkState.RenderingWarmup:
-                ImGui.TextUnformatted($"Warming up rendering... ({warmupRenderingS:F2}/{warmupRenderingTargetS:F2} s, frames={run.RenderingWarmUpFrameCount:N0})");
-                break;
-
-            case BenchmarkState.RenderingSample:
-            {
-                ImGui.TextUnformatted($"Sampling rendering... ({sampleRenderingS:F2}/{sampleRenderingTargetS:F2} s, frames={run.RenderingSampleFrameCount:N0})");
-
-                double frameMsAvg = run.RenderingFrameMsAvg;
-                double frameMsMin = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMin : 0;
-                double frameMsMax = run.RenderingSampleFrameCount > 0 ? run.RenderingFrameMsMax : 0;
-
-                double bFpsAvg = frameMsAvg > 0 ? 1000.0 / frameMsAvg : 0;
-                double bFpsMin = frameMsMax > 0 ? 1000.0 / frameMsMax : 0;
-                double bFpsMax = frameMsMin > 0 ? 1000.0 / frameMsMin : 0;
-
-                ImGui.TextUnformatted($"Frame avg    : {frameMsAvg:F2} ms ({bFpsAvg:F1} FPS)");
-                ImGui.TextUnformatted($"Frame min/max: {frameMsMin:F2} ms ({bFpsMax:F1} FPS) / {frameMsMax:F2} ms ({bFpsMin:F1} FPS)");
                 ImGui.TextUnformatted($"Total benchmark time: {run.TotalTimeMs / 1000.0:F2} s");
                 break;
             }
