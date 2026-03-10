@@ -1,6 +1,4 @@
-﻿using System.Globalization;
-
-namespace Silt.Metrics;
+﻿namespace Silt.Metrics;
 
 /// <summary>
 /// Aggregates per-chunk geometry and memory statistics.
@@ -13,19 +11,16 @@ public sealed class ChunkStats
     public long TotalVertices { get; private set; }
     public int MinVertices { get; private set; } = int.MaxValue;
     public int MaxVertices { get; private set; } = int.MinValue;
-    public double AvgVertices => SampleCount > 0 ? (double)TotalVertices / SampleCount : 0;
     
     // Triangle counts
     public long TotalTriangles { get; private set; }
     public int MinTriangles { get; private set; } = int.MaxValue;
     public int MaxTriangles { get; private set; } = int.MinValue;
-    public double AvgTriangles => SampleCount > 0 ? (double)TotalTriangles / SampleCount : 0;
     
     // Mesh data size (VBO + EBO in bytes)
     public long TotalMeshBytes { get; private set; }
     public long MinMeshBytes { get; private set; } = long.MaxValue;
     public long MaxMeshBytes { get; private set; } = long.MinValue;
-    public double AvgMeshBytes => SampleCount > 0 ? (double)TotalMeshBytes / SampleCount : 0;
     
     // Voxel data size per chunk (constant based on chunk dimensions)
     public int VoxelDataBytesPerChunk { get; private set; }
@@ -85,31 +80,33 @@ public sealed class ChunkStats
 
     public string FormatInvariant(string keyPrefix)
     {
-        double avgVertices = SampleCount > 0 ? AvgVertices : 0;
+        long totalVertices = SampleCount > 0 ? TotalVertices : 0;
         int minVertices = SampleCount > 0 ? MinVertices : 0;
         int maxVertices = SampleCount > 0 ? MaxVertices : 0;
         
-        double avgTriangles = SampleCount > 0 ? AvgTriangles : 0;
+        long totalTriangles = SampleCount > 0 ? TotalTriangles : 0;
         int minTriangles = SampleCount > 0 ? MinTriangles : 0;
         int maxTriangles = SampleCount > 0 ? MaxTriangles : 0;
         
-        double avgMeshBytes = SampleCount > 0 ? AvgMeshBytes : 0;
+        long totalMeshBytes = SampleCount > 0 ? TotalMeshBytes : 0;
         long minMeshBytes = SampleCount > 0 ? MinMeshBytes : 0;
         long maxMeshBytes = SampleCount > 0 ? MaxMeshBytes : 0;
 
-        return $"{keyPrefix}_total_count={TotalChunkCount}\n" +
+        long totalVoxelBytes = VoxelDataBytesPerChunk * TotalChunkCount;
+        
+        return $"{keyPrefix}_count_total={TotalChunkCount}\n" +
                $"{keyPrefix}_sample_count={SampleCount}\n" +
-               $"{keyPrefix}_vertices_avg={avgVertices.ToString("F2", CultureInfo.InvariantCulture)}\n" +
+               $"{keyPrefix}_vertices_total={totalVertices}\n" +
                $"{keyPrefix}_vertices_min={minVertices}\n" +
                $"{keyPrefix}_vertices_max={maxVertices}\n" +
-               $"{keyPrefix}_triangles_avg={avgTriangles.ToString("F2", CultureInfo.InvariantCulture)}\n" +
+               $"{keyPrefix}_triangles_total={totalTriangles}\n" +
                $"{keyPrefix}_triangles_min={minTriangles}\n" +
                $"{keyPrefix}_triangles_max={maxTriangles}\n" +
-               $"{keyPrefix}_voxel_data_bytes={VoxelDataBytesPerChunk}\n" +
-               $"{keyPrefix}_mesh_data_bytes_avg={avgMeshBytes.ToString("F2", CultureInfo.InvariantCulture)}\n" +
+               $"{keyPrefix}_mesh_data_bytes_total={totalMeshBytes}\n" +
                $"{keyPrefix}_mesh_data_bytes_min={minMeshBytes}\n" +
                $"{keyPrefix}_mesh_data_bytes_max={maxMeshBytes}\n" +
-               $"{keyPrefix}_total_memory_bytes_avg={(avgMeshBytes + VoxelDataBytesPerChunk).ToString("F2", CultureInfo.InvariantCulture)}\n";
+               $"{keyPrefix}_voxel_data_bytes_total={totalVoxelBytes}\n" +
+               $"{keyPrefix}_data_bytes_total={totalMeshBytes + totalVoxelBytes}\n";
     }
 }
 
