@@ -152,7 +152,7 @@ public sealed class BenchmarkRun
         if (State != BenchmarkState.NotStarted)
             throw new InvalidOperationException("BenchmarkRun can only be started once.");
 
-        TransitionTo(BenchmarkState.RenderingWarmup);
+        TransitionTo(GetNextState());
     }
 
 
@@ -172,7 +172,7 @@ public sealed class BenchmarkRun
                 RenderingWarmUpTimeMs += frameMs;
                 RenderingWarmUpFrameCount++;
                 if (RenderingWarmUpTimeMs >= _warmUpRenderingTargetMs)
-                    TransitionTo(BenchmarkState.RenderingSample);
+                    TransitionTo(GetNextState());
                 break;
 
             case BenchmarkState.RenderingSample:
@@ -189,7 +189,7 @@ public sealed class BenchmarkRun
                 RenderingFrameMsAvg = RenderingSampleFrameCount > 0 ? RenderingTotalTimeMs / RenderingSampleFrameCount : 0;
 
                 if (RenderingSampleTimeMs >= _sampleRenderingTargetMs)
-                    TransitionTo(BenchmarkState.MeshingWarmup);
+                    TransitionTo(GetNextState());
 
                 break;
             }
@@ -198,7 +198,7 @@ public sealed class BenchmarkRun
                 MeshingWarmUpTimeMs += frameMs;
                 MeshingWarmUpFrameCount++;
                 if (MeshingWarmUpTimeMs >= _warmUpMeshingTargetMs)
-                    TransitionTo(BenchmarkState.MeshingSample);
+                    TransitionTo(GetNextState());
                 break;
 
             case BenchmarkState.MeshingSample:
@@ -214,7 +214,7 @@ public sealed class BenchmarkRun
                 MeshingFrameMsAvg = MeshingSampleFrameCount > 0 ? MeshingTotalTimeMs / MeshingSampleFrameCount : 0;
 
                 if (MeshingSampleTimeMs >= _sampleMeshingTargetMs)
-                    TransitionTo(BenchmarkState.BatchRemeshWarmup);
+                    TransitionTo(GetNextState());
                 break;
             
             // BatchRemeshWarmup and BatchRemeshSample are driven externally via RecordBatchRemeshIteration
@@ -347,5 +347,50 @@ public sealed class BenchmarkRun
         }
         
         Config.OnComplete?.Invoke();
+    }
+
+
+    private BenchmarkState GetNextState()
+    {
+        // Get next state that does not have zero duration targets
+        switch (State)
+        {
+            case BenchmarkState.NotStarted:
+                if (_warmUpRenderingTargetMs > 0)
+                    return BenchmarkState.RenderingWarmup;
+                goto case BenchmarkState.RenderingWarmup;
+
+            case BenchmarkState.RenderingWarmup:
+                if (_sampleRenderingTargetMs > 0)
+                    return BenchmarkState.RenderingSample;
+                goto case BenchmarkState.RenderingSample;
+
+            case BenchmarkState.RenderingSample:
+                if (_warmUpMeshingTargetMs > 0)
+                    return BenchmarkState.MeshingWarmup;
+                goto case BenchmarkState.MeshingWarmup;
+
+            case BenchmarkState.MeshingWarmup:
+                if (_sampleMeshingTargetMs > 0)
+                    return BenchmarkState.MeshingSample;
+                goto case BenchmarkState.MeshingSample;
+
+            case BenchmarkState.MeshingSample:
+                if (_batchRemeshWarmupTargetIterations > 0)
+                    return BenchmarkState.BatchRemeshWarmup;
+                goto case BenchmarkState.BatchRemeshWarmup;
+
+            case BenchmarkState.BatchRemeshWarmup:
+                if (_batchRemeshSampleTargetIterations > 0)
+                    return BenchmarkState.BatchRemeshSample;
+                goto case BenchmarkState.BatchRemeshSample;
+
+            case BenchmarkState.BatchRemeshSample:
+                return BenchmarkState.Complete;
+
+            case BenchmarkState.Complete:
+            default:
+                throw new InvalidOperationException($"Invalid benchmark state: {State}");
+        }
     }
 }

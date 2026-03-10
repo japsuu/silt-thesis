@@ -94,6 +94,8 @@ public sealed class SiltEngine
                 batchRemeshSampleIterations: _options.BenchmarkBatchRemeshSampleIterations,
                 warmUpRenderingSeconds: _options.BenchmarkWarmUpRenderingSeconds,
                 sampleRenderingSeconds: _options.BenchmarkSampleRenderingSeconds));
+
+            ProfilingHelper.Initialize(_options.TargetProfilePhase);
         }
         else
         {

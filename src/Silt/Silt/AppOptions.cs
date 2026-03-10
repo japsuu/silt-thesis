@@ -1,4 +1,6 @@
-﻿namespace Silt;
+﻿using Silt.Metrics;
+
+namespace Silt;
 
 /// <summary>
 /// Parsed application options from command line args.
@@ -17,4 +19,6 @@ public sealed class AppOptions
 
     public double BenchmarkWarmUpRenderingSeconds { get; init; }
     public double BenchmarkSampleRenderingSeconds { get; init; }
+    
+    public ProfilePhase? TargetProfilePhase { get; init; }
 }

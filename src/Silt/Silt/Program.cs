@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using Silt.Core.SceneManagement;
+using Silt.Metrics;
 
 namespace Silt;
 
@@ -69,6 +70,14 @@ internal static class Program
             Description = "Sample duration (seconds) for the rendering phase"
         };
 
+        Option<string> profilePhaseOption = new("--profile")
+        {
+            Description = "Enable dotTrace profiling for the defined phase. Launch the app under dotTrace with 'Do not profile on start'. " +
+                          "Profiling data will be collected only during the defined sample phase and saved as a snapshot automatically. " +
+                          "Requires --benchmark to be specified." +
+                          $"Valid phases are: {string.Join(", ", ProfilePhaseExtensions.GetValidProfilePhases())}"
+        };
+
         RootCommand root = new("Silt Rendering Engine")
         {
             benchmarkSceneOption,
@@ -78,14 +87,22 @@ internal static class Program
             benchmarkBatchRemeshWarmupIterationsOption,
             benchmarkBatchRemeshSampleIterationsOption,
             benchmarkWarmupRenderingSecondsOption,
-            benchmarkSampleRenderingSecondsOption
+            benchmarkSampleRenderingSecondsOption,
+            profilePhaseOption
         };
 
         root.SetAction(parseResult =>
         {
+            string? benchmarkScene = parseResult.GetValue(benchmarkSceneOption);
+            string? profilePhase = parseResult.GetValue(profilePhaseOption);
+            
+            bool benchmarkEnabled = benchmarkScene != null;
+            if (profilePhase != null && !benchmarkEnabled)
+                throw new InvalidOperationException("The --profile option requires --benchmark to be specified.");
+
             AppOptions options = new()
             {
-                BenchmarkEnabled = parseResult.GetValue(benchmarkSceneOption) != null,
+                BenchmarkEnabled = benchmarkEnabled,
                 BenchmarkOutputFilePath = parseResult.GetValue(benchmarkOutOption),
                 BenchmarkWarmUpMeshingSeconds = parseResult.GetValue(benchmarkWarmupMeshingSecondsOption),
                 BenchmarkSampleMeshingSeconds = parseResult.GetValue(benchmarkSampleMeshingSecondsOption),
@@ -93,7 +110,10 @@ internal static class Program
                 BenchmarkBatchRemeshSampleIterations = parseResult.GetValue(benchmarkBatchRemeshSampleIterationsOption),
                 BenchmarkWarmUpRenderingSeconds = parseResult.GetValue(benchmarkWarmupRenderingSecondsOption),
                 BenchmarkSampleRenderingSeconds = parseResult.GetValue(benchmarkSampleRenderingSecondsOption),
-                BenchmarkSceneId = parseResult.GetValue(benchmarkSceneOption)
+                BenchmarkSceneId = benchmarkScene,
+                TargetProfilePhase = profilePhase != null
+                    ? ProfilePhaseExtensions.ParseProfilePhase(profilePhase)
+                    : null
             };
 
             SiltEngine engine = new();
