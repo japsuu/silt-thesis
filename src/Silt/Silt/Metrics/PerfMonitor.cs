@@ -46,7 +46,7 @@ public static class PerfMonitor
     /// Subscribe to benchmark state changes (only relevant in benchmark mode).
     /// Convenience wrapper over <see cref="BenchmarkRun.OnStateChanged"/>.
     /// </summary>
-    public static event Action<BenchmarkState>? BenchmarkStateChanged;
+    public static event Action<BenchmarkState, BenchmarkState>? BenchmarkStateChanged;
 
     /// <summary>
     /// Aggregated chunk meshing timings for the current benchmark run.
@@ -76,7 +76,7 @@ public static class PerfMonitor
         {
             Mode = PerfMonitorMode.Benchmark;
             BenchmarkRun = new BenchmarkRun(benchmarkConfig.Value);
-            BenchmarkRun.OnStateChanged += state => BenchmarkStateChanged?.Invoke(state);
+            BenchmarkRun.OnStateChanged += (oldState, newState) => BenchmarkStateChanged?.Invoke(oldState, newState);
 
             BenchmarkChunkMeshing ??= new MeshingStats();
             BenchmarkChunkMeshing.Reset();

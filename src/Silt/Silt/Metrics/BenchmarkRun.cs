@@ -49,7 +49,7 @@ public sealed class BenchmarkRun
     /// <summary>
     /// Fired whenever the benchmark transitions to a new state.
     /// </summary>
-    public event Action<BenchmarkState>? OnStateChanged;
+    public event Action<BenchmarkState, BenchmarkState>? OnStateChanged;
 
     // Frame time stats during MeshingSample
     public double MeshingFrameMsAvg { get; private set; }
@@ -235,8 +235,9 @@ public sealed class BenchmarkRun
         if (State == newState)
             return;
 
+        BenchmarkState oldState = State;
         State = newState;
-        OnStateChanged?.Invoke(newState);
+        OnStateChanged?.Invoke(oldState, newState);
     }
 
 

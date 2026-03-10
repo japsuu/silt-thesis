@@ -91,10 +91,10 @@ public sealed class BenchmarkScene : Scene
     }
 
 
-    private void OnBenchmarkStateChanged(BenchmarkState state)
+    private void OnBenchmarkStateChanged(BenchmarkState oldState, BenchmarkState newState)
     {
-        _isMeshingWorkloadActive = state is BenchmarkState.MeshingWarmup or BenchmarkState.MeshingSample;
-        _isBatchRemeshWorkloadActive = state is BenchmarkState.BatchRemeshWarmup or BenchmarkState.BatchRemeshSample;
+        _isMeshingWorkloadActive = newState is BenchmarkState.MeshingWarmup or BenchmarkState.MeshingSample;
+        _isBatchRemeshWorkloadActive = newState is BenchmarkState.BatchRemeshWarmup or BenchmarkState.BatchRemeshSample;
     }
 
 
