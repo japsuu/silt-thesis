@@ -32,6 +32,7 @@ public sealed class SiltEngine
     private Scene _currentScene = null!;
     private double _fixedFrameAccumulator;
     private bool _isExitRequested;
+    private bool _wireframeEnabled;
 
 
     public void Run(AppOptions? options = null)
@@ -188,6 +189,13 @@ public sealed class SiltEngine
 
         if (Input.WasKeyPressed(Key.F1))
             UiManager.ToggleUiVisibility();
+
+        if (Input.WasKeyPressed(Key.F2))
+        {
+            _wireframeEnabled = !_wireframeEnabled;
+            _gl.PolygonMode(GLEnum.FrontAndBack, _wireframeEnabled ? GLEnum.Line : GLEnum.Fill);
+            Log.Information("Wireframe mode {State}", _wireframeEnabled ? "enabled" : "disabled");
+        }
 
         _uiManager.Update(deltaTime);
         _imguiController.Update((float)deltaTime);
