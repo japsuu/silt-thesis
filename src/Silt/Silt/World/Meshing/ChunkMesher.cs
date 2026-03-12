@@ -35,7 +35,7 @@ public static class ChunkMesher
     public const int VERTEX_SIZE_ELEMENTS = 9;
     public const int VERTEX_ELEMENT_SIZE_BYTES = sizeof(float);
     public const int INDEX_ELEMENT_SIZE_BYTES = sizeof(uint);
-    
+
     // Worst case: all voxels are solid and no face culling
     private const int VOXELS_PER_CHUNK = Chunk.SIZE * Chunk.SIZE * Chunk.SIZE;
     private const int FACES_PER_VOXEL = 6;
@@ -53,331 +53,328 @@ public static class ChunkMesher
     private static int _vertexDataCount;
     private static uint _vertexCount;
     private static int _indexDataCount;
-    
+
+    // Greedy meshing scratch mask: stores the voxel ID of visible faces for the current slice.
+    // 0 means no face (air or occluded). Positive value = voxel ID to merge.
+    private static readonly int[] _mask = new int[Chunk.SIZE * Chunk.SIZE];
+
 
     public static VoxelMeshData MeshChunk(in MeshingInput input)
     {
         // Generate vertex and index data based on the voxel data in the chunk.
         // Optimizations:
-        // - Neighbor-based face culling: skip a face if the adjacent voxel is solid.
+        // - Neighbor-based face culling: skip faces between adjacent solid voxels (including across chunk boundaries)
+        // - Greedy meshing with neighbor-based face culling:
+        //   For each of the 6 face directions, we sweep through slices perpendicular to the face normal.
+        //   For each slice we build a 2D mask of visible face voxel IDs, then greedily merge
+        //   adjacent same-ID entries into larger rectangular quads.
         _vertexDataCount = 0;
         _vertexCount = 0;
         _indexDataCount = 0;
 
         Voxel[,,] voxels = input.Center.Voxels;
+        float worldX = input.Center.WorldPosition.X;
+        float worldY = input.Center.WorldPosition.Y;
+        float worldZ = input.Center.WorldPosition.Z;
 
-        for (int x = 0; x < Chunk.SIZE; x++)
+        // --- X axis faces (X+ and X-) ---
+        // Slice perpendicular to X: iterate x from 0..SIZE, mask is [y, z]
+        for (int face = 0; face < 2; face++)
         {
-            for (int y = 0; y < Chunk.SIZE; y++)
+            bool positive = face == 0; // X+ or X-
+            float nx = positive ? 1f : -1f;
+
+            for (int x = 0; x < Chunk.SIZE; x++)
             {
-                for (int z = 0; z < Chunk.SIZE; z++)
+                // Build mask for this slice
+                for (int y = 0; y < Chunk.SIZE; y++)
                 {
-                    Voxel voxel = voxels[x, y, z];
-                    if (voxel.Id == 0)
-                        continue;
-
-                    (float r, float g, float b) = GetColorForVoxel(voxel);
-
-                    // Each vertex has 9 floats: position (3), color (3), and normal (3)
-                    float baseX = input.Center.WorldPosition.X + x;
-                    float baseY = input.Center.WorldPosition.Y + y;
-                    float baseZ = input.Center.WorldPosition.Z + z;
-
-                    // Z+ face
-                    if (IsVoxelOccluder(x, y, z + 1, voxels, input.ZPos?.Voxels))
+                    for (int z = 0; z < Chunk.SIZE; z++)
                     {
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
-                    }
+                        int voxelId = voxels[x, y, z].Id;
+                        if (voxelId == 0)
+                        {
+                            _mask[y * Chunk.SIZE + z] = 0;
+                            continue;
+                        }
 
-                    // Z- face
-                    if (IsVoxelOccluder(x, y, z - 1, voxels, input.ZNeg?.Voxels))
-                    {
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
-                    }
-
-                    // X+ face
-                    if (IsVoxelOccluder(x + 1, y, z, voxels, input.XPos?.Voxels))
-                    {
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
-                    }
-
-                    // X- face
-                    if (IsVoxelOccluder(x - 1, y, z, voxels, input.XNeg?.Voxels))
-                    {
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 0;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
-                    }
-
-                    // Y+ face
-                    if (IsVoxelOccluder(x, y + 1, z, voxels, input.YPos?.Voxels))
-                    {
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY + 1;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = 1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
-                    }
-
-                    // Y- face
-                    if (IsVoxelOccluder(x, y - 1, z, voxels, input.YNeg?.Voxels))
-                    {
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX + 1;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = baseX;
-                        _vertices[_vertexDataCount++] = baseY;
-                        _vertices[_vertexDataCount++] = baseZ + 1;
-                        _vertices[_vertexDataCount++] = r;
-                        _vertices[_vertexDataCount++] = g;
-                        _vertices[_vertexDataCount++] = b;
-                        _vertices[_vertexDataCount++] = 0;
-                        _vertices[_vertexDataCount++] = -1;
-                        _vertices[_vertexDataCount++] = 0;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 1;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount;
-                        _indices[_indexDataCount++] = _vertexCount + 2;
-                        _indices[_indexDataCount++] = _vertexCount + 3;
-                        _vertexCount += 4;
+                        int adjX = positive ? x + 1 : x - 1;
+                        Voxel[,,]? neighbour = positive ? input.XPos?.Voxels : input.XNeg?.Voxels;
+                        bool visible = IsVoxelOccluder(adjX, y, z, voxels, neighbour);
+                        _mask[y * Chunk.SIZE + z] = visible ? voxelId : 0;
                     }
                 }
+
+                // Greedy merge the mask
+                GreedyMerge(Chunk.SIZE, Chunk.SIZE, (row, col, w, h, id) =>
+                {
+                    // row = y, col = z
+                    (float r, float g, float b) = GetColorForId(id);
+                    float px = worldX + x + (positive ? 1 : 0);
+                    float py0 = worldY + row;
+                    float py1 = worldY + row + h;
+                    float pz0 = worldZ + col;
+                    float pz1 = worldZ + col + w;
+
+                    if (positive)
+                    {
+                        // X+ face: vertices wound CCW when viewed from +X
+                        EmitQuad(
+                            px, py0, pz1,
+                            px, py0, pz0,
+                            px, py1, pz0,
+                            px, py1, pz1,
+                            r, g, b, nx, 0, 0);
+                    }
+                    else
+                    {
+                        // X- face
+                        EmitQuad(
+                            px, py0, pz0,
+                            px, py0, pz1,
+                            px, py1, pz1,
+                            px, py1, pz0,
+                            r, g, b, nx, 0, 0);
+                    }
+                });
             }
         }
-        
+
+        // --- Y axis faces (Y+ and Y-) ---
+        // Slice perpendicular to Y: iterate y from 0..SIZE, mask is [x, z]
+        for (int face = 0; face < 2; face++)
+        {
+            bool positive = face == 0;
+            float ny = positive ? 1f : -1f;
+
+            for (int y = 0; y < Chunk.SIZE; y++)
+            {
+                for (int x = 0; x < Chunk.SIZE; x++)
+                {
+                    for (int z = 0; z < Chunk.SIZE; z++)
+                    {
+                        int voxelId = voxels[x, y, z].Id;
+                        if (voxelId == 0)
+                        {
+                            _mask[x * Chunk.SIZE + z] = 0;
+                            continue;
+                        }
+
+                        int adjY = positive ? y + 1 : y - 1;
+                        Voxel[,,]? neighbour = positive ? input.YPos?.Voxels : input.YNeg?.Voxels;
+                        bool visible = IsVoxelOccluder(x, adjY, z, voxels, neighbour);
+                        _mask[x * Chunk.SIZE + z] = visible ? voxelId : 0;
+                    }
+                }
+
+                GreedyMerge(Chunk.SIZE, Chunk.SIZE, (row, col, w, h, id) =>
+                {
+                    // row = x, col = z
+                    (float r, float g, float b) = GetColorForId(id);
+                    float py = worldY + y + (positive ? 1 : 0);
+                    float px0 = worldX + row;
+                    float px1 = worldX + row + h;
+                    float pz0 = worldZ + col;
+                    float pz1 = worldZ + col + w;
+
+                    if (positive)
+                    {
+                        // Y+ face
+                        EmitQuad(
+                            px0, py, pz1,
+                            px1, py, pz1,
+                            px1, py, pz0,
+                            px0, py, pz0,
+                            r, g, b, 0, ny, 0);
+                    }
+                    else
+                    {
+                        // Y- face
+                        EmitQuad(
+                            px0, py, pz0,
+                            px1, py, pz0,
+                            px1, py, pz1,
+                            px0, py, pz1,
+                            r, g, b, 0, ny, 0);
+                    }
+                });
+            }
+        }
+
+        // --- Z axis faces (Z+ and Z-) ---
+        // Slice perpendicular to Z: iterate z from 0..SIZE, mask is [x, y]
+        for (int face = 0; face < 2; face++)
+        {
+            bool positive = face == 0;
+            float nz = positive ? 1f : -1f;
+
+            for (int z = 0; z < Chunk.SIZE; z++)
+            {
+                for (int x = 0; x < Chunk.SIZE; x++)
+                {
+                    for (int y = 0; y < Chunk.SIZE; y++)
+                    {
+                        int voxelId = voxels[x, y, z].Id;
+                        if (voxelId == 0)
+                        {
+                            _mask[x * Chunk.SIZE + y] = 0;
+                            continue;
+                        }
+
+                        int adjZ = positive ? z + 1 : z - 1;
+                        Voxel[,,]? neighbour = positive ? input.ZPos?.Voxels : input.ZNeg?.Voxels;
+                        bool visible = IsVoxelOccluder(x, y, adjZ, voxels, neighbour);
+                        _mask[x * Chunk.SIZE + y] = visible ? voxelId : 0;
+                    }
+                }
+
+                GreedyMerge(Chunk.SIZE, Chunk.SIZE, (row, col, w, h, id) =>
+                {
+                    // row = x, col = y
+                    (float r, float g, float b) = GetColorForId(id);
+                    float pz = worldZ + z + (positive ? 1 : 0);
+                    float px0 = worldX + row;
+                    float px1 = worldX + row + h;
+                    float py0 = worldY + col;
+                    float py1 = worldY + col + w;
+
+                    if (positive)
+                    {
+                        // Z+ face
+                        EmitQuad(
+                            px0, py0, pz,
+                            px1, py0, pz,
+                            px1, py1, pz,
+                            px0, py1, pz,
+                            r, g, b, 0, 0, nz);
+                    }
+                    else
+                    {
+                        // Z- face
+                        EmitQuad(
+                            px1, py0, pz,
+                            px0, py0, pz,
+                            px0, py1, pz,
+                            px1, py1, pz,
+                            r, g, b, 0, 0, nz);
+                    }
+                });
+            }
+        }
+
         // Return the generated mesh data for this chunk.
         ReadOnlySpan<float> vertices = new(_vertices, 0, _vertexDataCount);
         ReadOnlySpan<uint> indices = new(_indices, 0, _indexDataCount);
         return new VoxelMeshData(vertices, indices);
+    }
+
+
+    /// <summary>
+    /// Greedy-merges the static <see cref="_mask"/> array (dimensions <paramref name="rows"/> × <paramref name="cols"/>).
+    /// For each maximal rectangle of identical non-zero IDs found, <paramref name="emitQuad"/> is called
+    /// with (startRow, startCol, width, height, voxelId). The mask entries are zeroed as they are consumed.
+    /// </summary>
+    private static void GreedyMerge(int rows, int cols, EmitQuadDelegate emitQuad)
+    {
+        for (int row = 0; row < rows; row++)
+        {
+            for (int col = 0; col < cols; )
+            {
+                int idx = row * cols + col;
+                int id = _mask[idx];
+                if (id == 0)
+                {
+                    col++;
+                    continue;
+                }
+
+                // Determine width: extend along the column axis while the ID matches
+                int w = 1;
+                while (col + w < cols && _mask[idx + w] == id)
+                    w++;
+
+                // Determine height: extend along the row axis while every cell in the strip matches
+                int h = 1;
+                bool fits = true;
+                while (row + h < rows && fits)
+                {
+                    int rowIdx = (row + h) * cols + col;
+                    for (int k = 0; k < w; k++)
+                    {
+                        if (_mask[rowIdx + k] != id)
+                        {
+                            fits = false;
+                            break;
+                        }
+                    }
+                    if (fits) h++;
+                }
+
+                // Zero out the merged region in the mask
+                for (int dy = 0; dy < h; dy++)
+                {
+                    int rowIdx = (row + dy) * cols + col;
+                    for (int dx = 0; dx < w; dx++)
+                        _mask[rowIdx + dx] = 0;
+                }
+
+                emitQuad(row, col, w, h, id);
+
+                col += w;
+            }
+        }
+    }
+
+    private delegate void EmitQuadDelegate(int row, int col, int w, int h, int voxelId);
+
+
+    /// <summary>
+    /// Emits a single quad (4 vertices, 6 indices) into the scratch buffers.
+    /// Vertices are specified in CCW winding order as seen from the front face.
+    /// </summary>
+    private static void EmitQuad(
+        float x0, float y0, float z0,
+        float x1, float y1, float z1,
+        float x2, float y2, float z2,
+        float x3, float y3, float z3,
+        float r, float g, float b,
+        float nx, float ny, float nz)
+    {
+        int vi = _vertexDataCount;
+
+        // Vertex 0
+        _vertices[vi++] = x0; _vertices[vi++] = y0; _vertices[vi++] = z0;
+        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
+        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
+
+        // Vertex 1
+        _vertices[vi++] = x1; _vertices[vi++] = y1; _vertices[vi++] = z1;
+        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
+        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
+
+        // Vertex 2
+        _vertices[vi++] = x2; _vertices[vi++] = y2; _vertices[vi++] = z2;
+        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
+        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
+
+        // Vertex 3
+        _vertices[vi++] = x3; _vertices[vi++] = y3; _vertices[vi++] = z3;
+        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
+        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
+
+        _vertexDataCount = vi;
+
+        // Two triangles: 0-1-2 and 0-2-3
+        int ii = _indexDataCount;
+        _indices[ii++] = _vertexCount;
+        _indices[ii++] = _vertexCount + 1;
+        _indices[ii++] = _vertexCount + 2;
+        _indices[ii++] = _vertexCount;
+        _indices[ii++] = _vertexCount + 2;
+        _indices[ii++] = _vertexCount + 3;
+        _indexDataCount = ii;
+
+        _vertexCount += 4;
     }
 
 
@@ -387,11 +384,11 @@ public static class ChunkMesher
         vao.SetVertexAttributePointer(1, 3, VertexAttribPointerType.Float, VERTEX_SIZE_ELEMENTS, 3); // color
         vao.SetVertexAttributePointer(2, 3, VertexAttribPointerType.Float, VERTEX_SIZE_ELEMENTS, 6); // normal
     }
-    
-    
-    private static (float r, float g, float b) GetColorForVoxel(Voxel voxel)
+
+
+    private static (float r, float g, float b) GetColorForId(int id)
     {
-        return voxel.Id switch
+        return id switch
         {
             0 => throw new ArgumentException("Air voxels should never get meshed!"),
             1 => (1f, 0f, 0f),  // red
@@ -401,7 +398,7 @@ public static class ChunkMesher
             5 => (0f, 1f, 1f),  // cyan
             6 => (1f, 0f, 1f),  // magenta
             7 => (1f, 1f, 1f),  // white
-            _ => throw new ArgumentException($"Unknown voxel ID: {voxel.Id}")
+            _ => throw new ArgumentException($"Unknown voxel ID: {id}")
         };
     }
 
@@ -414,7 +411,7 @@ public static class ChunkMesher
     private static bool IsVoxelOccluder(int x, int y, int z, Voxel[,,] voxels, Voxel[,,]? neighbourVoxels)
     {
         // Within chunk bounds: check the adjacent voxel directly
-        if (x is >= 0 and < Chunk.SIZE && 
+        if (x is >= 0 and < Chunk.SIZE &&
             y is >= 0 and < Chunk.SIZE &&
             z is >= 0 and < Chunk.SIZE)
             return voxels[x, y, z].Id == 0;
