@@ -14,6 +14,19 @@ public readonly ref struct VoxelMeshData(ReadOnlySpan<float> vertices, ReadOnlyS
 }
 
 /// <summary>
+/// Input data for voxel meshing,
+/// including the voxel data of the current chunk and its 6 immediate neighbors (or null if at world boundary).
+/// </summary>
+public readonly record struct MeshingInput(
+    Chunk Center,
+    Chunk? XPos,
+    Chunk? XNeg,
+    Chunk? YPos,
+    Chunk? YNeg,
+    Chunk? ZPos,
+    Chunk? ZNeg);
+
+/// <summary>
 /// Responsible for converting voxel data in a chunk into vertex and index data for rendering.
 /// Implements meshing algorithms to optimize the geometry.
 /// </summary>
@@ -42,14 +55,16 @@ public static class ChunkMesher
     private static int _indexDataCount;
     
 
-    public static VoxelMeshData MeshChunk(Chunk chunk)
+    public static VoxelMeshData MeshChunk(in MeshingInput input)
     {
         // Generate vertex and index data based on the voxel data in the chunk.
         // Optimizations:
-        // - Neighbor-based face culling: skip a face if the adjacent voxel within this chunk is solid.
+        // - Neighbor-based face culling: skip a face if the adjacent voxel is solid.
         _vertexDataCount = 0;
         _vertexCount = 0;
         _indexDataCount = 0;
+
+        Voxel[,,] voxels = input.Center.Voxels;
 
         for (int x = 0; x < Chunk.SIZE; x++)
         {
@@ -57,26 +72,19 @@ public static class ChunkMesher
             {
                 for (int z = 0; z < Chunk.SIZE; z++)
                 {
-                    Voxel voxel = chunk.Voxels[x, y, z];
+                    Voxel voxel = voxels[x, y, z];
                     if (voxel.Id == 0)
                         continue;
 
                     (float r, float g, float b) = GetColorForVoxel(voxel);
 
                     // Each vertex has 9 floats: position (3), color (3), and normal (3)
-                    float baseX = chunk.WorldPosition.X + x;
-                    float baseY = chunk.WorldPosition.Y + y;
-                    float baseZ = chunk.WorldPosition.Z + z;
-
-                    bool hasZPos = z + 1 < Chunk.SIZE && chunk.Voxels[x, y, z + 1].Id != 0;
-                    bool hasZNeg = z - 1 >= 0          && chunk.Voxels[x, y, z - 1].Id != 0;
-                    bool hasXPos = x + 1 < Chunk.SIZE && chunk.Voxels[x + 1, y, z].Id != 0;
-                    bool hasXNeg = x - 1 >= 0          && chunk.Voxels[x - 1, y, z].Id != 0;
-                    bool hasYPos = y + 1 < Chunk.SIZE && chunk.Voxels[x, y + 1, z].Id != 0;
-                    bool hasYNeg = y - 1 >= 0          && chunk.Voxels[x, y - 1, z].Id != 0;
+                    float baseX = input.Center.WorldPosition.X + x;
+                    float baseY = input.Center.WorldPosition.Y + y;
+                    float baseZ = input.Center.WorldPosition.Z + z;
 
                     // Z+ face
-                    if (!hasZPos)
+                    if (IsVoxelOccluder(x, y, z + 1, voxels, input.ZPos?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX;
                         _vertices[_vertexDataCount++] = baseY;
@@ -124,7 +132,7 @@ public static class ChunkMesher
                     }
 
                     // Z- face
-                    if (!hasZNeg)
+                    if (IsVoxelOccluder(x, y, z - 1, voxels, input.ZNeg?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX + 1;
                         _vertices[_vertexDataCount++] = baseY;
@@ -172,7 +180,7 @@ public static class ChunkMesher
                     }
 
                     // X+ face
-                    if (!hasXPos)
+                    if (IsVoxelOccluder(x + 1, y, z, voxels, input.XPos?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX + 1;
                         _vertices[_vertexDataCount++] = baseY;
@@ -220,7 +228,7 @@ public static class ChunkMesher
                     }
 
                     // X- face
-                    if (!hasXNeg)
+                    if (IsVoxelOccluder(x - 1, y, z, voxels, input.XNeg?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX;
                         _vertices[_vertexDataCount++] = baseY;
@@ -268,7 +276,7 @@ public static class ChunkMesher
                     }
 
                     // Y+ face
-                    if (!hasYPos)
+                    if (IsVoxelOccluder(x, y + 1, z, voxels, input.YPos?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX;
                         _vertices[_vertexDataCount++] = baseY + 1;
@@ -316,7 +324,7 @@ public static class ChunkMesher
                     }
 
                     // Y- face
-                    if (!hasYNeg)
+                    if (IsVoxelOccluder(x, y - 1, z, voxels, input.YNeg?.Voxels))
                     {
                         _vertices[_vertexDataCount++] = baseX;
                         _vertices[_vertexDataCount++] = baseY;
@@ -395,5 +403,39 @@ public static class ChunkMesher
             7 => (1f, 1f, 1f),  // white
             _ => throw new ArgumentException($"Unknown voxel ID: {voxel.Id}")
         };
+    }
+
+
+    /// <param name="voxels">Voxel data of the current chunk</param>
+    /// <param name="neighbourVoxels">Voxel data of the neighbor chunk in the occluder direction, or null at world boundary</param>
+    /// <param name="x">Voxel X coordinate</param>
+    /// <param name="y">Voxel Y coordinate</param>
+    /// <param name="z">Voxel Z coordinate</param>
+    private static bool IsVoxelOccluder(int x, int y, int z, Voxel[,,] voxels, Voxel[,,]? neighbourVoxels)
+    {
+        // Within chunk bounds: check the adjacent voxel directly
+        if (x is >= 0 and < Chunk.SIZE && 
+            y is >= 0 and < Chunk.SIZE &&
+            z is >= 0 and < Chunk.SIZE)
+            return voxels[x, y, z].Id == 0;
+
+        if (neighbourVoxels == null)
+            return true;
+
+        // Wrap out-of-bounds coordinate to the opposite side of the neighbor chunk
+        if (x >= Chunk.SIZE)
+            x = 0;
+        else if (x < 0)
+            x = Chunk.SIZE - 1;
+        if (y >= Chunk.SIZE)
+            y = 0;
+        else if (y < 0)
+            y = Chunk.SIZE - 1;
+        if (z >= Chunk.SIZE)
+            z = 0;
+        else if (z < 0)
+            z = Chunk.SIZE - 1;
+
+        return neighbourVoxels[x, y, z].Id == 0;
     }
 }

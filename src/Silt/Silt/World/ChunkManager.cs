@@ -41,7 +41,7 @@ public sealed class ChunkManager : IDisposable
                 for (int z = -worldRadiusChunks; z < worldRadiusChunks; z++)
                 {
                     int index = GetChunkIndex(x, y, z);
-                    Chunk chunk = new(new Vector3D<int>(x, y, z), gl);
+                    Chunk chunk = new(new Vector3D<int>(x, y, z), gl, this);
                     Chunks[index] = chunk;
                 }
             }
@@ -52,10 +52,10 @@ public sealed class ChunkManager : IDisposable
     public void GenerateAllChunks()
     {
         foreach (Chunk chunk in Chunks)
-        {
             ChunkGenerator.GenerateChunk(chunk);
+        
+        foreach (Chunk chunk in Chunks)
             chunk.UpdateMeshAfterGeneration();
-        }
     }
     
     
@@ -70,6 +70,23 @@ public sealed class ChunkManager : IDisposable
         
         int index = GetChunkIndex(chunkX, chunkY, chunkZ);
         return Chunks[index] ?? throw new ArgumentException($"No chunk found at position ({chunkX}, {chunkY}, {chunkZ})");
+    }
+    
+    
+    /// <summary>
+    /// Returns the chunk at the given chunk-coordinate position, or null if outside the loaded world area.
+    /// </summary>
+    public Chunk? TryGetChunkAtPosition(int chunkX, int chunkY, int chunkZ)
+    {
+        if (chunkX < -_worldRadiusChunks || chunkX >= _worldRadiusChunks ||
+            chunkY < -_worldRadiusChunks || chunkY >= _worldRadiusChunks ||
+            chunkZ < -_worldRadiusChunks || chunkZ >= _worldRadiusChunks)
+        {
+            return null;
+        }
+        
+        int index = GetChunkIndex(chunkX, chunkY, chunkZ);
+        return Chunks[index];
     }
     
     

@@ -22,15 +22,17 @@ public sealed class Chunk : IDisposable
     public const int VOXEL_DATA_BYTES_PER_CHUNK = SIZE * SIZE * SIZE * VOXEL_SIZE_BYTES;
     
     public readonly Vector3D<int> Position;
+    private readonly ChunkManager _chunkManager;
     public readonly Vector3D<int> WorldPosition;
     public readonly Voxel[,,] Voxels;
     
     private readonly ChunkRenderer _renderer;
     
     
-    public Chunk(Vector3D<int> position, GL gl)
+    public Chunk(Vector3D<int> position, GL gl, ChunkManager chunkManager)
     {
         Position = position;
+        _chunkManager = chunkManager;
         WorldPosition = position * SIZE;
         Voxels = new Voxel[SIZE, SIZE, SIZE];
         _renderer = new ChunkRenderer(gl);
@@ -42,7 +44,8 @@ public sealed class Chunk : IDisposable
     /// </summary>
     public void UpdateMeshAfterGeneration()
     {
-        VoxelMeshData meshData = ChunkMesher.MeshChunk(this);
+        MeshingInput input = GetMeshingInput();
+        VoxelMeshData meshData = ChunkMesher.MeshChunk(input);
         _renderer.UpdateMeshData(meshData);
         
         // Record per-chunk geometry statistics
@@ -61,7 +64,8 @@ public sealed class Chunk : IDisposable
     {
         long startTicks = Stopwatch.GetTimestamp();
 
-        VoxelMeshData meshData = ChunkMesher.MeshChunk(this);
+        MeshingInput input = GetMeshingInput();
+        VoxelMeshData meshData = ChunkMesher.MeshChunk(input);
         _renderer.UpdateMeshData(meshData);
 
         long endTicks = Stopwatch.GetTimestamp();
@@ -76,7 +80,8 @@ public sealed class Chunk : IDisposable
     /// </summary>
     public void UpdateMesh()
     {
-        VoxelMeshData meshData = ChunkMesher.MeshChunk(this);
+        MeshingInput input = GetMeshingInput();
+        VoxelMeshData meshData = ChunkMesher.MeshChunk(input);
         _renderer.UpdateMeshData(meshData);
     }
     
@@ -90,5 +95,19 @@ public sealed class Chunk : IDisposable
     public void Dispose()
     {
         _renderer.Dispose();
+    }
+    
+    
+    private MeshingInput GetMeshingInput()
+    {
+        return new MeshingInput(
+            this,
+            _chunkManager.TryGetChunkAtPosition(Position.X + 1, Position.Y, Position.Z),
+            _chunkManager.TryGetChunkAtPosition(Position.X - 1, Position.Y, Position.Z),
+            _chunkManager.TryGetChunkAtPosition(Position.X, Position.Y + 1, Position.Z),
+            _chunkManager.TryGetChunkAtPosition(Position.X, Position.Y - 1, Position.Z),
+            _chunkManager.TryGetChunkAtPosition(Position.X, Position.Y, Position.Z + 1),
+            _chunkManager.TryGetChunkAtPosition(Position.X, Position.Y, Position.Z - 1)
+        );
     }
 }
