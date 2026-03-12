@@ -1,7 +1,7 @@
 ﻿<component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Silt BENCH normal" type="DotNetProject" factoryName=".NET Project">
     <option name="EXE_PATH" value="$PROJECT_DIR$/Silt/bin/Release/net10.0/Silt.exe" />
-    <option name="PROGRAM_PARAMETERS" value="--benchmark normal --benchmark-out C:\Users\japsu\Desktop\silt_bench\normal.txt" />
+    <option name="PROGRAM_PARAMETERS" value="--benchmark normal" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/Silt/bin/Release/net10.0" />
     <option name="PASS_PARENT_ENVS" value="1" />
     <option name="ENV_FILE_PATHS" value="" />
