@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Text;
+using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silt.Core.Utils;
 
@@ -98,6 +99,18 @@ public sealed class Shader : GraphicsResource
     }
     
     
+    public void SetUniform(int location, float v0, float v1, float v2)
+    {
+        Gl.Uniform3(location, v0, v1, v2);
+    }
+
+
+    public void SetUniform(int location, int v0, int v1, int v2)
+    {
+        Gl.Uniform3(location, v0, v1, v2);
+    }
+
+
     public unsafe void SetUniform(int location, Matrix4x4 value)
     {
         Gl.UniformMatrix4(location, 1, false, (float*)&value);

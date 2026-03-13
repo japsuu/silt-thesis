@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using Serilog;
 using Silk.NET.OpenGL;
 using Silt.Core.CameraManagement;
 using Shader = Silt.Core.Graphics.Shader;
@@ -15,6 +16,7 @@ public sealed class VoxelWorldRenderer : IDisposable
     private readonly Shader _chunkShader;
     private readonly int _uMatView;
     private readonly int _uMatProj;
+    private readonly int _uChunkPos;
 
 
     public VoxelWorldRenderer(GL gl, ChunkManager chunkManager)
@@ -25,6 +27,7 @@ public sealed class VoxelWorldRenderer : IDisposable
         _chunkShader = new Shader(_gl, "voxel_chunk", "assets/voxel_chunk.vert", "assets/voxel_chunk.frag");
         _uMatView = _chunkShader.GetUniformLocation("u_mat_view");
         _uMatProj = _chunkShader.GetUniformLocation("u_mat_proj");
+        _uChunkPos = _chunkShader.GetUniformLocation("u_chunk_pos");
     }
 
 
@@ -39,7 +42,10 @@ public sealed class VoxelWorldRenderer : IDisposable
 
         // Iterate over visible chunks and draw them.
         foreach (Chunk chunk in _chunkManager.Chunks)
+        {
+            _chunkShader.SetUniform(_uChunkPos, chunk.WorldPosition.X, chunk.WorldPosition.Y, chunk.WorldPosition.Z);
             chunk.Draw();
+        }
     }
 
 

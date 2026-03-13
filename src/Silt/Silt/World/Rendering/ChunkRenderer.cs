@@ -11,17 +11,17 @@ namespace Silt.World.Rendering;
 public sealed class ChunkRenderer : IDisposable
 {
     private readonly GL _gl;
-    private readonly VertexArrayObject<float, uint> _vao;
-    private readonly BufferObject<float> _vbo;
+    private readonly VertexArrayObject<uint, uint> _vao;
+    private readonly BufferObject<uint> _vbo;
     private readonly BufferObject<uint> _ebo;
 
 
     public ChunkRenderer(GL gl)
     {
         _gl = gl;
-        _vbo = new BufferObject<float>(_gl, BufferTargetARB.ArrayBuffer);
+        _vbo = new BufferObject<uint>(_gl, BufferTargetARB.ArrayBuffer);
         _ebo = new BufferObject<uint>(_gl, BufferTargetARB.ElementArrayBuffer);
-        _vao = new VertexArrayObject<float, uint>(_gl, _vbo, _ebo);
+        _vao = new VertexArrayObject<uint, uint>(_gl, _vbo, _ebo);
         ChunkMesher.SetupVertexAttributes(_vao);
 
         // Cleanup

@@ -7,10 +7,11 @@ namespace Silt.World.Meshing;
 /// <summary>
 /// Contains the vertex and index data for rendering a chunk of voxels.
 /// Produced by the meshing system based on the voxel data in a chunk.
+/// Each vertex is a single packed uint.
 /// </summary>
-public readonly ref struct VoxelMeshData(ReadOnlySpan<float> vertices, ReadOnlySpan<uint> indices)
+public readonly ref struct VoxelMeshData(ReadOnlySpan<uint> vertices, ReadOnlySpan<uint> indices)
 {
-    public readonly ReadOnlySpan<float> Vertices = vertices;
+    public readonly ReadOnlySpan<uint> Vertices = vertices;
     public readonly ReadOnlySpan<uint> Indices = indices;
 }
 
@@ -33,9 +34,17 @@ public readonly record struct MeshingInput(
 /// </summary>
 public static class ChunkMesher
 {
-    public const int VERTEX_SIZE_ELEMENTS = 9;
-    public const int VERTEX_ELEMENT_SIZE_BYTES = sizeof(float);
+    public const int VERTEX_SIZE_ELEMENTS = 1;
+    public const int VERTEX_ELEMENT_SIZE_BYTES = sizeof(uint);
     public const int INDEX_ELEMENT_SIZE_BYTES = sizeof(uint);
+
+    // Normal direction indices (must match shader lookup table)
+    private const int NORMAL_X_POS = 0;
+    private const int NORMAL_X_NEG = 1;
+    private const int NORMAL_Y_POS = 2;
+    private const int NORMAL_Y_NEG = 3;
+    private const int NORMAL_Z_POS = 4;
+    private const int NORMAL_Z_NEG = 5;
 
     // Worst case: all voxels are solid and no face culling
     private const int VOXELS_PER_CHUNK = Chunk.SIZE * Chunk.SIZE * Chunk.SIZE;
@@ -52,7 +61,7 @@ public static class ChunkMesher
 
     // Meshing "scratch buffers" to avoid allocations during meshing.
     // We can use a single static buffer since meshing is currently single-threaded, and we process one chunk at a time.
-    private static readonly float[] _vertices = new float[MAX_VERTICES_PER_CHUNK * VERTEX_SIZE_ELEMENTS];
+    private static readonly uint[] _vertices = new uint[MAX_VERTICES_PER_CHUNK * VERTEX_SIZE_ELEMENTS];
     private static readonly uint[] _indices = new uint[MAX_INDICES_PER_CHUNK];
     private static int _vertexDataCount;
     private static uint _vertexCount;
@@ -74,6 +83,24 @@ public static class ChunkMesher
     private static readonly uint[] _faceMasks = new uint[(MAX_VOXEL_ID + 1) * Chunk.SIZE];
 
 
+    /// <summary>
+    /// Packs a chunk-local vertex position, color index, and normal index into a single uint.
+    /// </summary>
+    private static uint PackVertex(int x, int y, int z, int colorIndex, int normalIndex)
+    {
+        // Bits 0–5:   local X position (0–32)
+        // Bits 6–11:  local Y position (0–32)
+        // Bits 12–17: local Z position (0–32)
+        // Bits 18–20: color index      (0–6, maps to voxel ID 1–7)
+        // Bits 21–23: normal index     (0–5: +X, −X, +Y, −Y, +Z, −Z)
+        return (uint)x
+               | ((uint)y << 6)
+               | ((uint)z << 12)
+               | ((uint)colorIndex << 18)
+               | ((uint)normalIndex << 21);
+    }
+
+
     public static VoxelMeshData MeshChunk(in MeshingInput input)
     {
         // Binary meshing approach:
@@ -88,9 +115,6 @@ public static class ChunkMesher
         _indexDataCount = 0;
 
         Voxel[,,] voxels = input.Center.Voxels;
-        float worldX = input.Center.WorldPosition.X;
-        float worldY = input.Center.WorldPosition.Y;
-        float worldZ = input.Center.WorldPosition.Z;
 
         // X AXIS FACES (X+ and X-)
         // Solid mask layout: _solidSliceMasks[x * SIZE + y], bits represent z positions
@@ -104,7 +128,7 @@ public static class ChunkMesher
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
-            float nx = positive ? 1f : -1f;
+            int normalIdx = positive ? NORMAL_X_POS : NORMAL_X_NEG;
             Voxel[,,]? neighbourVoxels = positive ? input.XPos?.Voxels : input.XNeg?.Voxels;
 
             for (int x = 0; x < Chunk.SIZE; x++)
@@ -155,12 +179,12 @@ public static class ChunkMesher
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = y, startBit = z
-                    (float r, float g, float b) = GetColorForId(id);
-                    float px = worldX + x + (positive ? 1 : 0);
-                    float py0 = worldY + row;
-                    float py1 = worldY + row + height;
-                    float pz0 = worldZ + startBit;
-                    float pz1 = worldZ + startBit + width;
+                    int colorIdx = id - 1;
+                    int px = x + (positive ? 1 : 0);
+                    int py0 = row;
+                    int py1 = row + height;
+                    int pz0 = startBit;
+                    int pz1 = startBit + width;
 
                     if (positive)
                     {
@@ -170,7 +194,7 @@ public static class ChunkMesher
                             px, py0, pz0,
                             px, py1, pz0,
                             px, py1, pz1,
-                            r, g, b, nx, 0, 0);
+                            colorIdx, normalIdx);
                     }
                     else
                     {
@@ -180,7 +204,7 @@ public static class ChunkMesher
                             px, py0, pz1,
                             px, py1, pz1,
                             px, py1, pz0,
-                            r, g, b, nx, 0, 0);
+                            colorIdx, normalIdx);
                     }
                 });
             }
@@ -198,7 +222,7 @@ public static class ChunkMesher
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
-            float ny = positive ? 1f : -1f;
+            int normalIdx = positive ? NORMAL_Y_POS : NORMAL_Y_NEG;
             Voxel[,,]? neighbourVoxels = positive ? input.YPos?.Voxels : input.YNeg?.Voxels;
 
             for (int y = 0; y < Chunk.SIZE; y++)
@@ -245,12 +269,12 @@ public static class ChunkMesher
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = x, startBit = z
-                    (float r, float g, float b) = GetColorForId(id);
-                    float py = worldY + y + (positive ? 1 : 0);
-                    float px0 = worldX + row;
-                    float px1 = worldX + row + height;
-                    float pz0 = worldZ + startBit;
-                    float pz1 = worldZ + startBit + width;
+                    int colorIdx = id - 1;
+                    int py = y + (positive ? 1 : 0);
+                    int px0 = row;
+                    int px1 = row + height;
+                    int pz0 = startBit;
+                    int pz1 = startBit + width;
 
                     if (positive)
                     {
@@ -260,7 +284,7 @@ public static class ChunkMesher
                             px1, py, pz1,
                             px1, py, pz0,
                             px0, py, pz0,
-                            r, g, b, 0, ny, 0);
+                            colorIdx, normalIdx);
                     }
                     else
                     {
@@ -270,7 +294,7 @@ public static class ChunkMesher
                             px1, py, pz0,
                             px1, py, pz1,
                             px0, py, pz1,
-                            r, g, b, 0, ny, 0);
+                            colorIdx, normalIdx);
                     }
                 });
             }
@@ -288,7 +312,7 @@ public static class ChunkMesher
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
-            float nz = positive ? 1f : -1f;
+            int normalIdx = positive ? NORMAL_Z_POS : NORMAL_Z_NEG;
             Voxel[,,]? neighbourVoxels = positive ? input.ZPos?.Voxels : input.ZNeg?.Voxels;
 
             for (int z = 0; z < Chunk.SIZE; z++)
@@ -335,12 +359,12 @@ public static class ChunkMesher
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = x, startBit = y
-                    (float r, float g, float b) = GetColorForId(id);
-                    float pz = worldZ + z + (positive ? 1 : 0);
-                    float px0 = worldX + row;
-                    float px1 = worldX + row + height;
-                    float py0 = worldY + startBit;
-                    float py1 = worldY + startBit + width;
+                    int colorIdx = id - 1;
+                    int pz = z + (positive ? 1 : 0);
+                    int px0 = row;
+                    int px1 = row + height;
+                    int py0 = startBit;
+                    int py1 = startBit + width;
 
                     if (positive)
                     {
@@ -350,7 +374,7 @@ public static class ChunkMesher
                             px1, py0, pz,
                             px1, py1, pz,
                             px0, py1, pz,
-                            r, g, b, 0, 0, nz);
+                            colorIdx, normalIdx);
                     }
                     else
                     {
@@ -360,14 +384,14 @@ public static class ChunkMesher
                             px0, py0, pz,
                             px0, py1, pz,
                             px1, py1, pz,
-                            r, g, b, 0, 0, nz);
+                            colorIdx, normalIdx);
                     }
                 });
             }
         }
 
         // Return the generated mesh data for this chunk.
-        ReadOnlySpan<float> vertices = new(_vertices, 0, _vertexDataCount);
+        ReadOnlySpan<uint> vertices = new(_vertices, 0, _vertexDataCount);
         ReadOnlySpan<uint> indices = new(_indices, 0, _indexDataCount);
         return new VoxelMeshData(vertices, indices);
     }
@@ -432,36 +456,21 @@ public static class ChunkMesher
     /// <summary>
     /// Emits a single quad (4 vertices, 6 indices) into the scratch buffers.
     /// Vertices are specified in CCW winding order as seen from the front face.
+    /// Each vertex is packed into a single uint via <see cref="PackVertex"/>.
     /// </summary>
     private static void EmitQuad(
-        float x0, float y0, float z0,
-        float x1, float y1, float z1,
-        float x2, float y2, float z2,
-        float x3, float y3, float z3,
-        float r, float g, float b,
-        float nx, float ny, float nz)
+        int x0, int y0, int z0,
+        int x1, int y1, int z1,
+        int x2, int y2, int z2,
+        int x3, int y3, int z3,
+        int colorIndex, int normalIndex)
     {
         int vi = _vertexDataCount;
 
-        // Vertex 0
-        _vertices[vi++] = x0; _vertices[vi++] = y0; _vertices[vi++] = z0;
-        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
-        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
-
-        // Vertex 1
-        _vertices[vi++] = x1; _vertices[vi++] = y1; _vertices[vi++] = z1;
-        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
-        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
-
-        // Vertex 2
-        _vertices[vi++] = x2; _vertices[vi++] = y2; _vertices[vi++] = z2;
-        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
-        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
-
-        // Vertex 3
-        _vertices[vi++] = x3; _vertices[vi++] = y3; _vertices[vi++] = z3;
-        _vertices[vi++] = r;  _vertices[vi++] = g;  _vertices[vi++] = b;
-        _vertices[vi++] = nx; _vertices[vi++] = ny; _vertices[vi++] = nz;
+        _vertices[vi++] = PackVertex(x0, y0, z0, colorIndex, normalIndex);
+        _vertices[vi++] = PackVertex(x1, y1, z1, colorIndex, normalIndex);
+        _vertices[vi++] = PackVertex(x2, y2, z2, colorIndex, normalIndex);
+        _vertices[vi++] = PackVertex(x3, y3, z3, colorIndex, normalIndex);
 
         _vertexDataCount = vi;
 
@@ -479,27 +488,8 @@ public static class ChunkMesher
     }
 
 
-    public static void SetupVertexAttributes(VertexArrayObject<float, uint> vao)
+    public static void SetupVertexAttributes(VertexArrayObject<uint, uint> vao)
     {
-        vao.SetVertexAttributePointer(0, 3, VertexAttribPointerType.Float, VERTEX_SIZE_ELEMENTS, 0); // position
-        vao.SetVertexAttributePointer(1, 3, VertexAttribPointerType.Float, VERTEX_SIZE_ELEMENTS, 3); // color
-        vao.SetVertexAttributePointer(2, 3, VertexAttribPointerType.Float, VERTEX_SIZE_ELEMENTS, 6); // normal
-    }
-
-
-    private static (float r, float g, float b) GetColorForId(int id)
-    {
-        return id switch
-        {
-            0 => throw new ArgumentException("Air voxels should never get meshed!"),
-            1 => (1f, 0f, 0f),  // red
-            2 => (0f, 1f, 0f),  // green
-            3 => (0f, 0f, 1f),  // blue
-            4 => (1f, 1f, 0f),  // yellow
-            5 => (0f, 1f, 1f),  // cyan
-            6 => (1f, 0f, 1f),  // magenta
-            7 => (1f, 1f, 1f),  // white
-            _ => throw new ArgumentException($"Unknown voxel ID: {id}")
-        };
+        vao.SetVertexAttributeIPointer(0, 1, VertexAttribIType.UnsignedInt, 1, 0);
     }
 }

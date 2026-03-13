@@ -48,6 +48,17 @@ public sealed class VertexArrayObject<TVertex, TIndex> : GraphicsResource
 
 
     /// <summary>
+    /// Sets up an integer vertex attribute pointer.
+    /// </summary>
+    public unsafe void SetVertexAttributeIPointer(uint index, int count, VertexAttribIType type, uint stride, int offset)
+    {
+        Bind();
+        Gl.VertexAttribIPointer(index, count, type, stride * (uint) sizeof(TVertex), (void*)(offset * sizeof(TVertex)));
+        Gl.EnableVertexAttribArray(index);
+    }
+
+
+    /// <summary>
     /// Binds this vertex array object to the current OpenGL context.
     /// </summary>
     public void Bind()
