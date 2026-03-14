@@ -71,9 +71,18 @@ public static class ChunkMesher
     /// Per-axis solid bitmasks for all slices.
     /// Layout: _solidSliceMasks[slice * Chunk.SIZE + row] = bitmask of solid voxels along the column axis.
     /// Each bit in the uint represents one voxel position along the column axis (0 = air, 1 = solid).
-    /// Reused per axis (cleared and rebuilt for X, Y, Z in turn).
+    /// Reused per axis (derived from <see cref="_solidSliceMasksBase"/> for Y and Z axes).
     /// </summary>
     private static readonly uint[] _solidSliceMasks = new uint[Chunk.SIZE * Chunk.SIZE];
+
+    /// <summary>
+    /// Persistent copy of the X-axis solid bitmasks, used to derive Y and Z axis masks via transpose.
+    /// Layout: _solidSliceMasksBase[x * SIZE + y] = bitmask of solid voxels along the z axis.
+    /// Built once per <see cref="MeshChunk"/> call; the Y-axis and Z-axis masks are then computed
+    /// from this buffer using index transpose and bit transpose respectively, avoiding redundant
+    /// voxel array scans.
+    /// </summary>
+    private static readonly uint[] _solidSliceMasksBase = new uint[Chunk.SIZE * Chunk.SIZE];
 
     /// <summary>
     /// Per-voxel-type binary face masks for one slice.
@@ -124,6 +133,9 @@ public static class ChunkMesher
                 for (int z = 0; z < Chunk.SIZE; z++)
                     if (ids[Chunk.Idx(x, y, z)] != 0)
                         _solidSliceMasks[x * Chunk.SIZE + y] |= 1u << z;
+
+        // Persist X-axis masks for later transposition to Y and Z axes
+        Array.Copy(_solidSliceMasks, _solidSliceMasksBase, _solidSliceMasks.Length);
 
         for (int face = 0; face < 2; face++)
         {
@@ -212,13 +224,11 @@ public static class ChunkMesher
         }
 
         // Y AXIS FACES (Y+ and Y-)
-        // Solid mask layout: _solidSliceMasks[y * SIZE + x], bits represent z positions
-        Array.Clear(_solidSliceMasks, 0, _solidSliceMasks.Length);
+        // Derive Y-axis masks from X-axis via index transpose (no voxel array access needed):
+        // X-axis: [x * SIZE + y] bits=z → Y-axis: [y * SIZE + x] bits=z
         for (int y = 0; y < Chunk.SIZE; y++)
             for (int x = 0; x < Chunk.SIZE; x++)
-                for (int z = 0; z < Chunk.SIZE; z++)
-                    if (ids[Chunk.Idx(x, y, z)] != 0)
-                        _solidSliceMasks[y * Chunk.SIZE + x] |= 1u << z;
+                _solidSliceMasks[y * Chunk.SIZE + x] = _solidSliceMasksBase[x * Chunk.SIZE + y];
 
         for (int face = 0; face < 2; face++)
         {
@@ -303,13 +313,23 @@ public static class ChunkMesher
         }
 
         // Z AXIS FACES (Z+ and Z-)
-        // Solid mask layout: _solidSliceMasks[z * SIZE + x], bits represent y positions
+        // Derive Z-axis masks from X-axis via bit transpose (no voxel array access needed):
+        // X-axis: [x * SIZE + y] bits=z → Z-axis: [z * SIZE + x] bits=y
+        // For each (x, y), extract set bits z from the X-axis mask and scatter them as bit y
+        // into the Z-axis mask at [z * SIZE + x]. Operates on 4 KiB of L1-resident data.
         Array.Clear(_solidSliceMasks, 0, _solidSliceMasks.Length);
-        for (int z = 0; z < Chunk.SIZE; z++)
-            for (int x = 0; x < Chunk.SIZE; x++)
-                for (int y = 0; y < Chunk.SIZE; y++)
-                    if (ids[Chunk.Idx(x, y, z)] != 0)
-                        _solidSliceMasks[z * Chunk.SIZE + x] |= 1u << y;
+        for (int x = 0; x < Chunk.SIZE; x++)
+            for (int y = 0; y < Chunk.SIZE; y++)
+            {
+                uint mask = _solidSliceMasksBase[x * Chunk.SIZE + y];
+                uint yBit = 1u << y;
+                while (mask != 0)
+                {
+                    int z = BitOperations.TrailingZeroCount(mask);
+                    mask &= mask - 1; // clear lowest set bit
+                    _solidSliceMasks[z * Chunk.SIZE + x] |= yBit;
+                }
+            }
 
         for (int face = 0; face < 2; face++)
         {
