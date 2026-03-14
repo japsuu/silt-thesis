@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silt.Metrics;
@@ -24,9 +25,16 @@ public sealed class Chunk : IDisposable
     public readonly Vector3D<int> Position;
     private readonly ChunkManager _chunkManager;
     public readonly Vector3D<int> WorldPosition;
-    public readonly Voxel[,,] Voxels;
+    public readonly Voxel[] Voxels;
     
     private readonly ChunkRenderer _renderer;
+    
+    
+    /// <summary>
+    /// Computes the flat array index for a voxel at (x, y, z) using X-major layout.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int Idx(int x, int y, int z) => x * SIZE * SIZE + y * SIZE + z;
     
     
     public Chunk(Vector3D<int> position, GL gl, ChunkManager chunkManager)
@@ -34,7 +42,7 @@ public sealed class Chunk : IDisposable
         Position = position;
         _chunkManager = chunkManager;
         WorldPosition = position * SIZE;
-        Voxels = new Voxel[SIZE, SIZE, SIZE];
+        Voxels = new Voxel[SIZE * SIZE * SIZE];
         _renderer = new ChunkRenderer(gl);
     }
     

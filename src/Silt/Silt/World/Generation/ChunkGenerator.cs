@@ -30,15 +30,8 @@ public static class ChunkGenerator
                     
                     float noiseValue = _fnl.GetNoise(worldX, worldY, worldZ);
                     bool solid = noiseValue > 0f;
-                    
-                    if (solid)
-                    {
-                        chunk.Voxels[x, y, z] = new Voxel(id, 0f, 0, 0);
-                    }
-                    else
-                    {
-                        chunk.Voxels[x, y, z] = new Voxel(0, 0f, 0, 0);
-                    }
+                    int vid = solid ? id : 0;
+                    chunk.Voxels[Chunk.Idx(x, y, z)] = new Voxel(vid, 0f, 0, 0);
                 }
             }
         }
