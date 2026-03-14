@@ -176,11 +176,12 @@ public static class ChunkMesher
                 }
 
                 // Binary greedy merge and emit quads
+                int sliceX = x;
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = y, startBit = z
                     int colorIdx = id - 1;
-                    int px = x + (positive ? 1 : 0);
+                    int px = sliceX + (positive ? 1 : 0);
                     int py0 = row;
                     int py1 = row + height;
                     int pz0 = startBit;
@@ -266,11 +267,12 @@ public static class ChunkMesher
                     }
                 }
 
+                int sliceY = y;
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = x, startBit = z
                     int colorIdx = id - 1;
-                    int py = y + (positive ? 1 : 0);
+                    int py = sliceY + (positive ? 1 : 0);
                     int px0 = row;
                     int px1 = row + height;
                     int pz0 = startBit;
@@ -356,11 +358,12 @@ public static class ChunkMesher
                     }
                 }
 
+                int sliceZ = z;
                 BinaryGreedyMerge((row, startBit, width, height, id) =>
                 {
                     // row = x, startBit = y
                     int colorIdx = id - 1;
-                    int pz = z + (positive ? 1 : 0);
+                    int pz = sliceZ + (positive ? 1 : 0);
                     int px0 = row;
                     int px1 = row + height;
                     int py0 = startBit;
