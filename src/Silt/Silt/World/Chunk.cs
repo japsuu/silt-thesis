@@ -16,16 +16,20 @@ public sealed class Chunk : IDisposable
 {
     public const int SIZE = 32;
     
-    /// <summary>Size of a single Voxel struct in bytes</summary>
-    public const int VOXEL_SIZE_BYTES = sizeof(int) + sizeof(float) + sizeof(int) + sizeof(int);
-    
-    /// <summary>Size of the voxel data for an entire chunk in bytes</summary>
-    public const int VOXEL_DATA_BYTES_PER_CHUNK = SIZE * SIZE * SIZE * VOXEL_SIZE_BYTES;
+    /// <summary>Size of the voxel data for an entire chunk in bytes (SoA: Id + Data1 + Data2 + Data3)</summary>
+    public const int VOXEL_DATA_BYTES_PER_CHUNK =
+        SIZE * SIZE * SIZE * (sizeof(int) + sizeof(float) + sizeof(int) + sizeof(int));
     
     public readonly Vector3D<int> Position;
     private readonly ChunkManager _chunkManager;
     public readonly Vector3D<int> WorldPosition;
-    public readonly Voxel[] Voxels;
+    
+    // SoA (Structure of Arrays) voxel storage — split by field for cache efficiency.
+    // Meshing only reads VoxelIds; keeping the other fields separate avoids polluting cache lines.
+    public readonly int[] VoxelIds;
+    public readonly float[] VoxelData1;
+    public readonly int[] VoxelData2;
+    public readonly int[] VoxelData3;
     
     private readonly ChunkRenderer _renderer;
     
@@ -42,7 +46,10 @@ public sealed class Chunk : IDisposable
         Position = position;
         _chunkManager = chunkManager;
         WorldPosition = position * SIZE;
-        Voxels = new Voxel[SIZE * SIZE * SIZE];
+        VoxelIds = new int[SIZE * SIZE * SIZE];
+        VoxelData1 = new float[SIZE * SIZE * SIZE];
+        VoxelData2 = new int[SIZE * SIZE * SIZE];
+        VoxelData3 = new int[SIZE * SIZE * SIZE];
         _renderer = new ChunkRenderer(gl);
     }
     

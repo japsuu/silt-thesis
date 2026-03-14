@@ -114,7 +114,7 @@ public static class ChunkMesher
         _vertexCount = 0;
         _indexDataCount = 0;
 
-        Voxel[] voxels = input.Center.Voxels;
+        int[] ids = input.Center.VoxelIds;
 
         // X AXIS FACES (X+ and X-)
         // Solid mask layout: _solidSliceMasks[x * SIZE + y], bits represent z positions
@@ -122,14 +122,14 @@ public static class ChunkMesher
         for (int x = 0; x < Chunk.SIZE; x++)
             for (int y = 0; y < Chunk.SIZE; y++)
                 for (int z = 0; z < Chunk.SIZE; z++)
-                    if (voxels[Chunk.Idx(x, y, z)].Id != 0)
+                    if (ids[Chunk.Idx(x, y, z)] != 0)
                         _solidSliceMasks[x * Chunk.SIZE + y] |= 1u << z;
 
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
             int normalIdx = positive ? NORMAL_X_POS : NORMAL_X_NEG;
-            Voxel[]? neighbourVoxels = positive ? input.XPos?.Voxels : input.XNeg?.Voxels;
+            int[]? neighbourIds = positive ? input.XPos?.VoxelIds : input.XNeg?.VoxelIds;
 
             for (int x = 0; x < Chunk.SIZE; x++)
             {
@@ -149,12 +149,12 @@ public static class ChunkMesher
                     {
                         neighborMask = _solidSliceMasks[adjX * Chunk.SIZE + y];
                     }
-                    else if (neighbourVoxels != null)
+                    else if (neighbourIds != null)
                     {
                         int wrappedX = positive ? 0 : Chunk.SIZE - 1;
                         neighborMask = 0;
                         for (int z = 0; z < Chunk.SIZE; z++)
-                            if (neighbourVoxels[Chunk.Idx(wrappedX, y, z)].Id != 0)
+                            if (neighbourIds[Chunk.Idx(wrappedX, y, z)] != 0)
                                 neighborMask |= 1u << z;
                     }
                     else
@@ -170,7 +170,7 @@ public static class ChunkMesher
                     {
                         int z = BitOperations.TrailingZeroCount(visibleMask);
                         visibleMask &= visibleMask - 1; // clear lowest set bit
-                        int id = voxels[Chunk.Idx(x, y, z)].Id;
+                        int id = ids[Chunk.Idx(x, y, z)];
                         _faceMasks[id * Chunk.SIZE + y] |= 1u << z;
                     }
                 }
@@ -217,14 +217,14 @@ public static class ChunkMesher
         for (int y = 0; y < Chunk.SIZE; y++)
             for (int x = 0; x < Chunk.SIZE; x++)
                 for (int z = 0; z < Chunk.SIZE; z++)
-                    if (voxels[Chunk.Idx(x, y, z)].Id != 0)
+                    if (ids[Chunk.Idx(x, y, z)] != 0)
                         _solidSliceMasks[y * Chunk.SIZE + x] |= 1u << z;
 
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
             int normalIdx = positive ? NORMAL_Y_POS : NORMAL_Y_NEG;
-            Voxel[]? neighbourVoxels = positive ? input.YPos?.Voxels : input.YNeg?.Voxels;
+            int[]? neighbourIds = positive ? input.YPos?.VoxelIds : input.YNeg?.VoxelIds;
 
             for (int y = 0; y < Chunk.SIZE; y++)
             {
@@ -243,12 +243,12 @@ public static class ChunkMesher
                     {
                         neighborMask = _solidSliceMasks[adjY * Chunk.SIZE + x];
                     }
-                    else if (neighbourVoxels != null)
+                    else if (neighbourIds != null)
                     {
                         int wrappedY = positive ? 0 : Chunk.SIZE - 1;
                         neighborMask = 0;
                         for (int z = 0; z < Chunk.SIZE; z++)
-                            if (neighbourVoxels[Chunk.Idx(x, wrappedY, z)].Id != 0)
+                            if (neighbourIds[Chunk.Idx(x, wrappedY, z)] != 0)
                                 neighborMask |= 1u << z;
                     }
                     else
@@ -262,7 +262,7 @@ public static class ChunkMesher
                     {
                         int z = BitOperations.TrailingZeroCount(visibleMask);
                         visibleMask &= visibleMask - 1;
-                        int id = voxels[Chunk.Idx(x, y, z)].Id;
+                        int id = ids[Chunk.Idx(x, y, z)];
                         _faceMasks[id * Chunk.SIZE + x] |= 1u << z;
                     }
                 }
@@ -308,14 +308,14 @@ public static class ChunkMesher
         for (int z = 0; z < Chunk.SIZE; z++)
             for (int x = 0; x < Chunk.SIZE; x++)
                 for (int y = 0; y < Chunk.SIZE; y++)
-                    if (voxels[Chunk.Idx(x, y, z)].Id != 0)
+                    if (ids[Chunk.Idx(x, y, z)] != 0)
                         _solidSliceMasks[z * Chunk.SIZE + x] |= 1u << y;
 
         for (int face = 0; face < 2; face++)
         {
             bool positive = face == 0;
             int normalIdx = positive ? NORMAL_Z_POS : NORMAL_Z_NEG;
-            Voxel[]? neighbourVoxels = positive ? input.ZPos?.Voxels : input.ZNeg?.Voxels;
+            int[]? neighbourIds = positive ? input.ZPos?.VoxelIds : input.ZNeg?.VoxelIds;
 
             for (int z = 0; z < Chunk.SIZE; z++)
             {
@@ -334,12 +334,12 @@ public static class ChunkMesher
                     {
                         neighborMask = _solidSliceMasks[adjZ * Chunk.SIZE + x];
                     }
-                    else if (neighbourVoxels != null)
+                    else if (neighbourIds != null)
                     {
                         int wrappedZ = positive ? 0 : Chunk.SIZE - 1;
                         neighborMask = 0;
                         for (int y = 0; y < Chunk.SIZE; y++)
-                            if (neighbourVoxels[Chunk.Idx(x, y, wrappedZ)].Id != 0)
+                            if (neighbourIds[Chunk.Idx(x, y, wrappedZ)] != 0)
                                 neighborMask |= 1u << y;
                     }
                     else
@@ -353,7 +353,7 @@ public static class ChunkMesher
                     {
                         int y = BitOperations.TrailingZeroCount(visibleMask);
                         visibleMask &= visibleMask - 1;
-                        int id = voxels[Chunk.Idx(x, y, z)].Id;
+                        int id = ids[Chunk.Idx(x, y, z)];
                         _faceMasks[id * Chunk.SIZE + x] |= 1u << y;
                     }
                 }
