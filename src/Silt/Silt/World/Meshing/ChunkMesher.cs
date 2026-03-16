@@ -193,39 +193,7 @@ public static class ChunkMesher
                     }
                 }
 
-                // Binary greedy merge and emit quads
-                int sliceX = x;
-                BinaryGreedyMerge((row, startBit, width, height, id) =>
-                {
-                    // row = y, startBit = z
-                    int colorIdx = id - 1;
-                    int px = sliceX + (positive ? 1 : 0);
-                    int py0 = row;
-                    int py1 = row + height;
-                    int pz0 = startBit;
-                    int pz1 = startBit + width;
-
-                    if (positive)
-                    {
-                        // X+ face
-                        EmitQuad(
-                            px, py0, pz1,
-                            px, py0, pz0,
-                            px, py1, pz0,
-                            px, py1, pz1,
-                            colorIdx, normalIdx);
-                    }
-                    else
-                    {
-                        // X- face
-                        EmitQuad(
-                            px, py0, pz0,
-                            px, py0, pz1,
-                            px, py1, pz1,
-                            px, py1, pz0,
-                            colorIdx, normalIdx);
-                    }
-                });
+                BinaryGreedyMerge(0, positive, x);
             }
         }
 
@@ -275,38 +243,7 @@ public static class ChunkMesher
                     }
                 }
 
-                int sliceY = y;
-                BinaryGreedyMerge((row, startBit, width, height, id) =>
-                {
-                    // row = x, startBit = z
-                    int colorIdx = id - 1;
-                    int py = sliceY + (positive ? 1 : 0);
-                    int px0 = row;
-                    int px1 = row + height;
-                    int pz0 = startBit;
-                    int pz1 = startBit + width;
-
-                    if (positive)
-                    {
-                        // Y+ face
-                        EmitQuad(
-                            px0, py, pz1,
-                            px1, py, pz1,
-                            px1, py, pz0,
-                            px0, py, pz0,
-                            colorIdx, normalIdx);
-                    }
-                    else
-                    {
-                        // Y- face
-                        EmitQuad(
-                            px0, py, pz0,
-                            px1, py, pz0,
-                            px1, py, pz1,
-                            px0, py, pz1,
-                            colorIdx, normalIdx);
-                    }
-                });
+                BinaryGreedyMerge(1, positive, y);
             }
         }
 
@@ -368,38 +305,7 @@ public static class ChunkMesher
                     }
                 }
 
-                int sliceZ = z;
-                BinaryGreedyMerge((row, startBit, width, height, id) =>
-                {
-                    // row = x, startBit = y
-                    int colorIdx = id - 1;
-                    int pz = sliceZ + (positive ? 1 : 0);
-                    int px0 = row;
-                    int px1 = row + height;
-                    int py0 = startBit;
-                    int py1 = startBit + width;
-
-                    if (positive)
-                    {
-                        // Z+ face
-                        EmitQuad(
-                            px0, py0, pz,
-                            px1, py0, pz,
-                            px1, py1, pz,
-                            px0, py1, pz,
-                            colorIdx, normalIdx);
-                    }
-                    else
-                    {
-                        // Z- face
-                        EmitQuad(
-                            px1, py0, pz,
-                            px0, py0, pz,
-                            px0, py1, pz,
-                            px1, py1, pz,
-                            colorIdx, normalIdx);
-                    }
-                });
+                BinaryGreedyMerge(2, positive, z);
             }
         }
 
@@ -508,8 +414,19 @@ public static class ChunkMesher
     /// 
     /// Merged bits are cleared from the masks as they are consumed.
     /// </summary>
-    private static void BinaryGreedyMerge(EmitBinaryQuadDelegate emitQuad)
+    /// <param name="axis">0 = X, 1 = Y, 2 = Z</param>
+    /// <param name="positive">true for the positive-direction face, false for negative</param>
+    /// <param name="sliceCoord">The slice coordinate along the current axis</param>
+    private static void BinaryGreedyMerge(int axis, bool positive, int sliceCoord)
     {
+        int normalIdx = axis switch
+        {
+            0 => positive ? NORMAL_X_POS : NORMAL_X_NEG,
+            1 => positive ? NORMAL_Y_POS : NORMAL_Y_NEG,
+            _ => positive ? NORMAL_Z_POS : NORMAL_Z_NEG,
+        };
+        int sliceOffset = positive ? 1 : 0;
+
         for (int id = 1; id <= MAX_VOXEL_ID; id++)
         {
             int maskBase = id * Chunk.SIZE;
@@ -543,13 +460,54 @@ public static class ChunkMesher
 
                     rowMask &= ~runMask;
 
-                    emitQuad(row, startBit, width, height, id);
+                    // Emit quad
+                    int colorIdx = id - 1;
+                    switch (axis)
+                    {
+                        case 0:
+                        {
+                            int px = sliceCoord + sliceOffset;
+                            int py0 = row;
+                            int py1 = row + height;
+                            int pz0 = startBit;
+                            int pz1 = startBit + width;
+                            if (positive)
+                                EmitQuad(px, py0, pz1, px, py0, pz0, px, py1, pz0, px, py1, pz1, colorIdx, normalIdx);
+                            else
+                                EmitQuad(px, py0, pz0, px, py0, pz1, px, py1, pz1, px, py1, pz0, colorIdx, normalIdx);
+                            break;
+                        }
+                        case 1:
+                        {
+                            int py = sliceCoord + sliceOffset;
+                            int px0 = row;
+                            int px1 = row + height;
+                            int pz0 = startBit;
+                            int pz1 = startBit + width;
+                            if (positive)
+                                EmitQuad(px0, py, pz1, px1, py, pz1, px1, py, pz0, px0, py, pz0, colorIdx, normalIdx);
+                            else
+                                EmitQuad(px0, py, pz0, px1, py, pz0, px1, py, pz1, px0, py, pz1, colorIdx, normalIdx);
+                            break;
+                        }
+                        default:
+                        {
+                            int pz = sliceCoord + sliceOffset;
+                            int px0 = row;
+                            int px1 = row + height;
+                            int py0 = startBit;
+                            int py1 = startBit + width;
+                            if (positive)
+                                EmitQuad(px0, py0, pz, px1, py0, pz, px1, py1, pz, px0, py1, pz, colorIdx, normalIdx);
+                            else
+                                EmitQuad(px1, py0, pz, px0, py0, pz, px0, py1, pz, px1, py1, pz, colorIdx, normalIdx);
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
-
-    private delegate void EmitBinaryQuadDelegate(int row, int startBit, int width, int height, int voxelId);
 
 
     /// <summary>
