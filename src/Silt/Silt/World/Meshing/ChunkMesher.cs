@@ -85,10 +85,10 @@ public static class ChunkMesher
     private static readonly uint[] _solidSliceMasksBase = new uint[Chunk.SIZE * Chunk.SIZE];
 
     /// <summary>
-    /// Pre-computed boundary bitmasks for the 6 neighbour faces.
+    /// Pre-computed boundary bitmasks for the 6 neighbor faces.
     /// Layout: _neighbourBoundaryMasks[faceIndex * Chunk.SIZE + row] = bitmask of solid voxels
-    /// in the adjacent boundary slice of the neighbouring chunk.
-    /// Built once per <see cref="MeshChunk"/> call. If the neighbour is null (world edge), the
+    /// in the adjacent boundary slice of the neighboring chunk.
+    /// Built once per <see cref="MeshChunk"/> call. If the neighbor is null (world edge), the
     /// corresponding segment remains zero.
     /// Face indices reuse the NORMAL_* constants (0–5).
     /// </summary>
@@ -135,18 +135,24 @@ public static class ChunkMesher
 
         int[] ids = input.Center.VoxelIds;
 
-        // Pre-compute boundary bitmasks for all 6 neighbour faces.
-        // Moves scattered neighbour reads out of the hot face-culling loop into a single pass.
+        // Pre-compute boundary bitmasks for all 6 neighbor faces.
+        // Moves scattered neighbor reads out of the hot face-culling loop into a single pass.
         PrecomputeBoundaryMasks(in input);
 
         // X AXIS FACES (X+ and X-)
         // Solid mask layout: _solidSliceMasks[x * SIZE + y], bits represent z positions
         Array.Clear(_solidSliceMasks, 0, _solidSliceMasks.Length);
         for (int x = 0; x < Chunk.SIZE; x++)
+        {
             for (int y = 0; y < Chunk.SIZE; y++)
+            {
                 for (int z = 0; z < Chunk.SIZE; z++)
+                {
                     if (ids[Chunk.Idx(x, y, z)] != 0)
                         _solidSliceMasks[x * Chunk.SIZE + y] |= 1u << z;
+                }
+            }
+        }
 
         // Persist X-axis masks for later transposition to Y and Z axes
         Array.Copy(_solidSliceMasks, _solidSliceMasksBase, _solidSliceMasks.Length);
@@ -166,19 +172,14 @@ public static class ChunkMesher
                 for (int y = 0; y < Chunk.SIZE; y++)
                 {
                     uint solidMask = _solidSliceMasks[x * Chunk.SIZE + y];
-                    if (solidMask == 0) continue;
+                    if (solidMask == 0)
+                        continue;
 
                     // Bitwise face culling: get neighbor solid mask for the adjacent slice
-                    uint neighborMask;
-                    if (!isBoundary)
-                    {
-                        neighborMask = _solidSliceMasks[adjX * Chunk.SIZE + y];
-                    }
-                    else
-                    {
-                        // Pre-computed boundary mask (zero if no neighbour = world edge)
-                        neighborMask = _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + y];
-                    }
+                    uint neighborMask = !isBoundary
+                        ? _solidSliceMasks[adjX * Chunk.SIZE + y]
+                        // Pre-computed boundary mask (zero if no neighbor = world edge)
+                        : _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + y];
 
                     // Visible faces: solid AND neighbor is air (bitwise AND-NOT)
                     uint visibleMask = solidMask & ~neighborMask;
@@ -198,11 +199,13 @@ public static class ChunkMesher
         }
 
         // Y AXIS FACES (Y+ and Y-)
-        // Derive Y-axis masks from X-axis via index transpose (no voxel array access needed):
-        // X-axis: [x * SIZE + y] bits=z → Y-axis: [y * SIZE + x] bits=z
+        // Derive Y-axis masks from X-axis via index transpose:
+        // X-axis: [x * SIZE + y] bits=z -> Y-axis: [y * SIZE + x] bits=z
         for (int y = 0; y < Chunk.SIZE; y++)
+        {
             for (int x = 0; x < Chunk.SIZE; x++)
                 _solidSliceMasks[y * Chunk.SIZE + x] = _solidSliceMasksBase[x * Chunk.SIZE + y];
+        }
 
         for (int face = 0; face < 2; face++)
         {
@@ -219,18 +222,13 @@ public static class ChunkMesher
                 for (int x = 0; x < Chunk.SIZE; x++)
                 {
                     uint solidMask = _solidSliceMasks[y * Chunk.SIZE + x];
-                    if (solidMask == 0) continue;
+                    if (solidMask == 0)
+                        continue;
 
-                    uint neighborMask;
-                    if (!isBoundary)
-                    {
-                        neighborMask = _solidSliceMasks[adjY * Chunk.SIZE + x];
-                    }
-                    else
-                    {
-                        // Pre-computed boundary mask (zero if no neighbour = world edge)
-                        neighborMask = _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + x];
-                    }
+                    uint neighborMask = !isBoundary
+                        ? _solidSliceMasks[adjY * Chunk.SIZE + x]
+                        // Pre-computed boundary mask (zero if no neighbor = world edge)
+                        : _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + x];
 
                     uint visibleMask = solidMask & ~neighborMask;
 
@@ -249,11 +247,12 @@ public static class ChunkMesher
 
         // Z AXIS FACES (Z+ and Z-)
         // Derive Z-axis masks from X-axis via bit transpose (no voxel array access needed):
-        // X-axis: [x * SIZE + y] bits=z → Z-axis: [z * SIZE + x] bits=y
+        // X-axis: [x * SIZE + y] bits=z -> Z-axis: [z * SIZE + x] bits=y
         // For each (x, y), extract set bits z from the X-axis mask and scatter them as bit y
         // into the Z-axis mask at [z * SIZE + x]. Operates on 4 KiB of L1-resident data.
         Array.Clear(_solidSliceMasks, 0, _solidSliceMasks.Length);
         for (int x = 0; x < Chunk.SIZE; x++)
+        {
             for (int y = 0; y < Chunk.SIZE; y++)
             {
                 uint mask = _solidSliceMasksBase[x * Chunk.SIZE + y];
@@ -265,6 +264,7 @@ public static class ChunkMesher
                     _solidSliceMasks[z * Chunk.SIZE + x] |= yBit;
                 }
             }
+        }
 
         for (int face = 0; face < 2; face++)
         {
@@ -281,18 +281,14 @@ public static class ChunkMesher
                 for (int x = 0; x < Chunk.SIZE; x++)
                 {
                     uint solidMask = _solidSliceMasks[z * Chunk.SIZE + x];
-                    if (solidMask == 0) continue;
+                    if (solidMask == 0)
+                        continue;
 
-                    uint neighborMask;
-                    if (!isBoundary)
-                    {
-                        neighborMask = _solidSliceMasks[adjZ * Chunk.SIZE + x];
-                    }
-                    else
-                    {
-                        // Pre-computed boundary mask (zero if no neighbour = world edge)
-                        neighborMask = _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + x];
-                    }
+                    uint neighborMask = !isBoundary
+                        ? _solidSliceMasks[adjZ * Chunk.SIZE + x]
+                        // Pre-computed boundary mask (zero if no neighbor = world edge)
+                        : _neighbourBoundaryMasks[normalIdx * Chunk.SIZE + x];
+
 
                     uint visibleMask = solidMask & ~neighborMask;
 
@@ -317,10 +313,10 @@ public static class ChunkMesher
 
 
     /// <summary>
-    /// Pre-computes boundary bitmasks for all 6 neighbour faces into <see cref="_neighbourBoundaryMasks"/>.
-    /// For each face direction, reads the adjacent boundary slice of the neighbouring chunk (if present)
+    /// Pre-computes boundary bitmasks for all 6 neighbor faces into <see cref="_neighbourBoundaryMasks"/>.
+    /// For each face direction, reads the adjacent boundary slice of the neighboring chunk (if present)
     /// and builds a uint bitmask per row matching the layout expected by the per-axis face-culling loops.
-    /// If the neighbour is null (world edge), the corresponding segment stays zero (all faces visible).
+    /// If the neighbor is null (world edge), the corresponding segment stays zero (all faces visible).
     /// </summary>
     private static void PrecomputeBoundaryMasks(in MeshingInput input)
     {
@@ -328,76 +324,100 @@ public static class ChunkMesher
 
         const int s = Chunk.SIZE;
 
-        // X+ boundary (face at x=SIZE-1 looking towards neighbour XPos slice x=0)
+        // X+ boundary (face at x=SIZE-1 looking towards neighbor XPos slice x=0)
         // Layout: [y] bits=z
         if (input.XPos != null)
         {
             int[] nIds = input.XPos.VoxelIds;
             const int baseIdx = NORMAL_X_POS * s;
             for (int y = 0; y < s; y++)
+            {
                 for (int z = 0; z < s; z++)
+                {
                     if (nIds[Chunk.Idx(0, y, z)] != 0)
                         _neighbourBoundaryMasks[baseIdx + y] |= 1u << z;
+                }
+            }
         }
 
-        // X- boundary (face at x=0 looking towards neighbour XNeg slice x=SIZE-1)
+        // X- boundary (face at x=0 looking towards neighbor XNeg slice x=SIZE-1)
         // Layout: [y] bits=z
         if (input.XNeg != null)
         {
             int[] nIds = input.XNeg.VoxelIds;
             const int baseIdx = NORMAL_X_NEG * s;
             for (int y = 0; y < s; y++)
+            {
                 for (int z = 0; z < s; z++)
+                {
                     if (nIds[Chunk.Idx(s - 1, y, z)] != 0)
                         _neighbourBoundaryMasks[baseIdx + y] |= 1u << z;
+                }
+            }
         }
 
-        // Y+ boundary (face at y=SIZE-1 looking towards neighbour YPos slice y=0)
+        // Y+ boundary (face at y=SIZE-1 looking towards neighbor YPos slice y=0)
         // Layout: [x] bits=z
         if (input.YPos != null)
         {
             int[] nIds = input.YPos.VoxelIds;
             const int baseIdx = NORMAL_Y_POS * s;
             for (int x = 0; x < s; x++)
+            {
                 for (int z = 0; z < s; z++)
+                {
                     if (nIds[Chunk.Idx(x, 0, z)] != 0)
                         _neighbourBoundaryMasks[baseIdx + x] |= 1u << z;
+                }
+            }
         }
 
-        // Y- boundary (face at y=0 looking towards neighbour YNeg slice y=SIZE-1)
+        // Y- boundary (face at y=0 looking towards neighbor YNeg slice y=SIZE-1)
         // Layout: [x] bits=z
         if (input.YNeg != null)
         {
             int[] nIds = input.YNeg.VoxelIds;
             const int baseIdx = NORMAL_Y_NEG * s;
             for (int x = 0; x < s; x++)
+            {
                 for (int z = 0; z < s; z++)
+                {
                     if (nIds[Chunk.Idx(x, s - 1, z)] != 0)
                         _neighbourBoundaryMasks[baseIdx + x] |= 1u << z;
+                }
+            }
         }
 
-        // Z+ boundary (face at z=SIZE-1 looking towards neighbour ZPos slice z=0)
+        // Z+ boundary (face at z=SIZE-1 looking towards neighbor ZPos slice z=0)
         // Layout: [x] bits=y
         if (input.ZPos != null)
         {
             int[] nIds = input.ZPos.VoxelIds;
             const int baseIdx = NORMAL_Z_POS * s;
             for (int x = 0; x < s; x++)
+            {
                 for (int y = 0; y < s; y++)
+                {
                     if (nIds[Chunk.Idx(x, y, 0)] != 0)
                         _neighbourBoundaryMasks[baseIdx + x] |= 1u << y;
+                }
+            }
         }
 
-        // Z- boundary (face at z=0 looking towards neighbour ZNeg slice z=SIZE-1)
+        // Z- boundary (face at z=0 looking towards neighbor ZNeg slice z=SIZE-1)
         // Layout: [x] bits=y
         if (input.ZNeg != null)
         {
             int[] nIds = input.ZNeg.VoxelIds;
             const int baseIdx = NORMAL_Z_NEG * s;
             for (int x = 0; x < s; x++)
+            {
                 for (int y = 0; y < s; y++)
+                {
                     if (nIds[Chunk.Idx(x, y, s - 1)] != 0)
                         _neighbourBoundaryMasks[baseIdx + x] |= 1u << y;
+                }
+            }
         }
     }
 
@@ -423,7 +443,7 @@ public static class ChunkMesher
         {
             0 => positive ? NORMAL_X_POS : NORMAL_X_NEG,
             1 => positive ? NORMAL_Y_POS : NORMAL_Y_NEG,
-            _ => positive ? NORMAL_Z_POS : NORMAL_Z_NEG,
+            _ => positive ? NORMAL_Z_POS : NORMAL_Z_NEG
         };
         int sliceOffset = positive ? 1 : 0;
 
@@ -451,8 +471,7 @@ public static class ChunkMesher
 
                     // Extend vertically: check subsequent rows for the same run pattern
                     int height = 1;
-                    while (row + height < Chunk.SIZE &&
-                           (_faceMasks[maskBase + row + height] & runMask) == runMask)
+                    while (row + height < Chunk.SIZE && (_faceMasks[maskBase + row + height] & runMask) == runMask)
                     {
                         _faceMasks[maskBase + row + height] &= ~runMask;
                         height++;
@@ -520,7 +539,8 @@ public static class ChunkMesher
         int x1, int y1, int z1,
         int x2, int y2, int z2,
         int x3, int y3, int z3,
-        int colorIndex, int normalIndex)
+        int colorIndex,
+        int normalIndex)
     {
         int vi = _vertexDataCount;
 
